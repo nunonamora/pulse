@@ -42,6 +42,34 @@ public enum FocusPlanner {
 
     /// A aplicação dona do terminal, descoberta pelo tty ou pelo próprio
     /// processo do agente.
+    /// O cmux é scriptável e expõe `working directory` por painel de terminal,
+    /// mais um comando `focus` que traz a janela à frente. Dá para acertar no
+    /// separador certo em vez de só na aplicação — e as sessões desta máquina
+    /// vivem lá dentro.
+    ///
+    /// Vem antes do recurso genérico e depois dos terminais que o AgentGlance
+    /// já sabia tratar: quem tem alvo preciso continua a usá-lo.
+    static func cmuxAction(for session: AgentSession) -> FocusAction? {
+        guard !session.cwd.isEmpty else { return nil }
+        let cwd = appleScriptString(session.cwd)
+        return .appleScript("""
+        tell application "cmux"
+          repeat with w in windows
+            repeat with t in tabs of w
+              try
+                set term to focused terminal of t
+                if (working directory of term) is \(cwd) then
+                  focus term
+                  return "ok"
+                end if
+              end try
+            end repeat
+          end repeat
+          error "AgentGlance could not find a cmux terminal for this directory"
+        end tell
+        """)
+    }
+
     static func fallbackAction(for session: AgentSession) -> FocusAction? {
         if let tty = session.terminal.tty,
            let pid = TerminalOwner.applicationPID(forTTY: tty) {
@@ -206,7 +234,14 @@ public enum FocusService {
     public static func focus(_ session: AgentSession) throws {
         do {
             try FocusActionRunner.run(FocusPlanner.actions(for: session))
+            return
         } catch {
+            // Escada de recursos, do mais preciso ao mais grosseiro. Só se
+            // desce quando o degrau acima falha mesmo.
+            if let cmux = FocusPlanner.cmuxAction(for: session),
+               (try? FocusActionRunner.run([cmux])) != nil {
+                return
+            }
             guard let fallback = FocusPlanner.fallbackAction(for: session) else { throw error }
             try FocusActionRunner.run([fallback])
         }

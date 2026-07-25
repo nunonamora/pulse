@@ -33,16 +33,30 @@ struct PermissionDecisionCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            deadline
             header
             if let detail = request.detail, !detail.isEmpty {
                 payload(detail)
             }
             actions
         }
-        .padding(.horizontal, SessionMenuLayout.sessionRowLeadingInset)
-        .padding(.top, 10)
-        .padding(.bottom, 8)
-        .overlay(alignment: .bottom) { deadline }
+        .padding(.horizontal, 14)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+        .background(
+            // Opaco, e não translúcido como o resto do painel. Uma decisão é a
+            // única coisa nesta app que EXIGE leitura: o comando tem de se ler
+            // sobre qualquer wallpaper, e o vidro não garante isso — sobre um
+            // fundo claro o texto desaparecia.
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(red: 0.055, green: 0.055, blue: 0.065))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(.white.opacity(0.10), lineWidth: 0.5)
+                )
+        )
+        .padding(.horizontal, SessionMenuLayout.contentHorizontalInset + 6)
+        .padding(.bottom, 6)
     }
 
     // MARK: - Cabeçalho
@@ -72,7 +86,7 @@ struct PermissionDecisionCard: View {
                 Text(request.toolName)
             }
             .font(.system(size: 11, design: .monospaced))
-            .foregroundStyle(.white.opacity(0.42))
+            .foregroundStyle(.white.opacity(0.5))
             .lineLimit(1)
         }
     }
@@ -85,7 +99,7 @@ struct PermissionDecisionCard: View {
         ScrollView(.vertical, showsIndicators: false) {
             Text(text)
                 .font(.system(size: 11.5, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.88))
+                .foregroundStyle(.white.opacity(0.95))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
@@ -93,7 +107,7 @@ struct PermissionDecisionCard: View {
         .frame(maxHeight: payloadHeight)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(.white.opacity(0.05))
+                .fill(.white.opacity(0.07))
         )
     }
 
@@ -122,7 +136,7 @@ struct PermissionDecisionCard: View {
                 } label: {
                     Text("Decide in the terminal")
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.38))
+                        .foregroundStyle(.white.opacity(0.45))
                 }
                 .buttonStyle(.plain)
             }
@@ -139,20 +153,25 @@ struct PermissionDecisionCard: View {
 
     // MARK: - Prazo
 
-    /// Quanto falta até o hook largar o agente por sua iniciativa. Vive na
-    /// aresta de baixo do cartão e não rouba altura a nada.
+    /// Quanto falta até o hook largar o agente por sua iniciativa.
+    ///
+    /// Fio de 2 pt no topo do cartão. Estava em baixo e a toda a largura, e
+    /// sobre um fundo claro lia-se como uma laje cinzenta entre os botões —
+    /// mais pesada do que a informação que carrega.
     private var deadline: some View {
         GeometryReader { geo in
             let total = request.expiresAt.timeIntervalSince(request.createdAt)
             let fraction = total > 0
                 ? max(0, request.expiresAt.timeIntervalSince(now) / total)
                 : 0
-            Capsule()
-                .fill(remaining <= 20 ? Color.orange : .white.opacity(0.22))
-                .frame(width: max(0, geo.size.width * fraction))
-                .animation(.linear(duration: 1), value: fraction)
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.07))
+                Capsule()
+                    .fill(remaining <= 20 ? Color.orange : Color.white.opacity(0.30))
+                    .frame(width: max(0, geo.size.width * fraction))
+                    .animation(.linear(duration: 1), value: fraction)
+            }
         }
         .frame(height: 2)
-        .padding(.horizontal, SessionMenuLayout.sessionRowLeadingInset)
     }
 }
