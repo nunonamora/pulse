@@ -1,4 +1,5 @@
 import AVFoundation
+import AppKit
 
 import AgentGlanceCore
 
@@ -124,11 +125,23 @@ final class VoiceCatalog {
     private(set) var portuguese: [AVSpeechSynthesisVoice] = []
     private var assignment: [AgentTool: AVSpeechSynthesisVoice] = [:]
 
-    private init() { refresh() }
+    private init() {
+        refresh()
+        // O catálogo era lido uma vez ao arrancar. Quem descarregasse uma voz
+        // nova tinha de fechar e reabrir a app para ela aparecer — e não havia
+        // nada a dizer-lho. Reler quando a app volta à frente resolve-o sem
+        // custo: é o momento em que alguém acabou de vir das Definições.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
+        }
+    }
 
     func refresh() {
         let all = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("pt") }
-        portuguese = all.sorted { a, b in
+        let ranked = all.sorted { a, b in
             func score(_ v: AVSpeechSynthesisVoice) -> Int {
                 var s = 0
                 switch v.quality {
@@ -142,6 +155,19 @@ final class VoiceCatalog {
                 return s
             }
             return score(a) > score(b)
+        }
+
+        // "Catarina (Enhanced)" e "Catarina" são a MESMA voz em qualidades
+        // diferentes. Sem isto, duas ferramentas ficavam com a mesma pessoa a
+        // falar e a distribuição perdia o sentido. Fica a melhor de cada nome.
+        var seen = Set<String>()
+        portuguese = ranked.filter { voice in
+            let name = voice.name
+                .replacingOccurrences(of: #"\s*\((Enhanced|Premium|Aprimorada|Melhorada)\)"#,
+                                      with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+                .lowercased()
+            return seen.insert(name).inserted
         }
 
         assignment.removeAll()

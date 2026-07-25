@@ -168,11 +168,18 @@ public struct NotchLayout: Equatable, Sendable {
     /// centering already leaves ~4-5pt of slack beside the outermost glyph,
     /// so the explicit inset stays slim to keep the capsule snug.
     public static let statusWingEdgePadding: CGFloat = 6
-    /// Outer inset of a hardware-notch wing, identical on both ends: the
-    /// compact drop lets its outermost glyph ride the curved shoulder the
-    /// same way on the left (status dot) and on the right (blocked count),
-    /// so a bar with wings on both sides reads symmetric.
-    public static let hardwareNotchOuterWingPadding: CGFloat = 8
+    /// Recuo exterior de uma ala do notch, igual dos dois lados.
+    ///
+    /// Tem de limpar o ombro: a silhueta curva `topShoulderRadius` (14 pt) para
+    /// dentro em cada ponta, e com 8 pt de recuo a bola exterior ficava DENTRO
+    /// dessa curva — meio glifo por cima do wallpaper em vez do preto.
+    ///
+    /// O valor original deixava-a "cavalgar o ombro" de propósito, e com o
+    /// ponto simples de 8 pt isso ainda passava. Deixou de passar quando o
+    /// indicador de atenção ganhou halo: um disco de 18 pt não perdoa uma
+    /// margem menor do que a curva que o corta.
+    public static let hardwareNotchOuterWingPadding: CGFloat =
+        HangingNotchMetrics.topShoulderRadius + 3
     public static let hardwareNotchRightOuterWingPadding = hardwareNotchOuterWingPadding
     /// The camera-facing edge of a hardware-notch wing reserves enough room
     /// to keep the counter cluster fully clear of the physical camera cutout.
