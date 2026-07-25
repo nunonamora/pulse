@@ -4,6 +4,12 @@ import Darwin
 public enum FocusAction: Equatable, Sendable {
     case run(executable: String, arguments: [String])
     case appleScript(String)
+    /// Último recurso: trazer à frente a aplicação dona deste processo.
+    ///
+    /// Não acerta no separador, mas põe-te à frente da janela certa — o que é
+    /// muito melhor do que a linha vermelha que aparecia antes para qualquer
+    /// terminal que não fosse Ghostty, iTerm2 ou Terminal.app.
+    case activate(pid: Int32)
 }
 
 public enum FocusError: Error, Equatable, Sendable {
@@ -23,8 +29,28 @@ public enum FocusPlanner {
             actions.append(.run(executable: "tmux", arguments: ["select-window", "-t", pane]))
             actions.append(.run(executable: "tmux", arguments: ["select-pane", "-t", pane]))
         }
-        actions.append(try terminalAction(for: session))
+        do {
+            actions.append(try terminalAction(for: session))
+        } catch {
+            // Sem alvo preciso, fazemos o que der. Falhar por inteiro só
+            // porque não se sabe o separador é desperdiçar o que se sabe.
+            guard let fallback = fallbackAction(for: session) else { throw error }
+            actions.append(fallback)
+        }
         return actions
+    }
+
+    /// A aplicação dona do terminal, descoberta pelo tty ou pelo próprio
+    /// processo do agente.
+    private static func fallbackAction(for session: AgentSession) -> FocusAction? {
+        if let tty = session.terminal.tty,
+           let pid = TerminalOwner.applicationPID(forTTY: tty) {
+            return .activate(pid: pid)
+        }
+        if session.pid > 0, let pid = TerminalOwner.applicationPID(ofDescendant: session.pid) {
+            return .activate(pid: pid)
+        }
+        return nil
     }
 
     private static func terminalAction(for session: AgentSession) throws -> FocusAction {
@@ -187,6 +213,19 @@ enum FocusActionRunner {
             case let .appleScript(script):
                 process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
                 process.arguments = ["-e", script]
+            case let .activate(pid):
+                // `open -a` pelo caminho do executável é o caminho que não
+                // depende do AppKit — isto também corre a partir do CLI, onde
+                // não há NSRunningApplication.
+                guard let path = TerminalOwner.executablePath(pid),
+                      let app = path.range(of: ".app/Contents/MacOS/")
+                          .map({ String(path[path.startIndex..<$0.lowerBound]) + ".app" })
+                else {
+                    if firstError == nil { firstError = FocusError.missingTerminalTarget }
+                    continue
+                }
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                process.arguments = [app]
             }
             do {
                 try process.run()
