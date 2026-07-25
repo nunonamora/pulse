@@ -77,10 +77,15 @@ struct NotchWidgetView: View {
         let leftEntries = summary.visibleEntries.filter { $0.kind != .blocked }
         let rightEntries = summary.visibleEntries.filter { $0.kind == .blocked }
         let showsIdleMark = summary.activeSessionCount == 0
+        // Quem anda na barra é quem está mesmo a trabalhar. Sem trabalho, não
+        // há mascote — a barra em repouso volta a ser só a barra.
+        let walker: AgentTool? = store.sessions
+            .first { $0.status == .working }?.tool
         let naturalLeftWidth = layout.statusWingWidth(
             side: .left,
             visibleIndicatorCount: leftEntries.count,
-            showsIdleMark: showsIdleMark
+            showsIdleMark: showsIdleMark,
+            showsMascot: walker != nil
         )
         let naturalRightWidth = layout.statusWingWidth(
             side: .right,
@@ -133,6 +138,7 @@ struct NotchWidgetView: View {
                                 leftEntries: leftEntries,
                                 rightEntries: rightEntries,
                                 showsIdleMark: showsIdleMark,
+                                walker: walker,
                                 leftWidth: leftWidth,
                                 rightWidth: rightWidth
                             )
@@ -357,6 +363,7 @@ struct NotchWidgetView: View {
         leftEntries: [SessionStatusSummary.StatusEntry],
         rightEntries: [SessionStatusSummary.StatusEntry],
         showsIdleMark: Bool,
+        walker: AgentTool?,
         leftWidth: CGFloat,
         rightWidth: CGFloat
     ) -> some View {
@@ -368,7 +375,13 @@ struct NotchWidgetView: View {
         HStack(spacing: 0) {
             Group {
                 if leftEntries.isEmpty {
-                    if showsIdleMark {
+                    if let walker {
+                        HStack(spacing: 0) {
+                            Spacer(minLength: layout.leftStatusWingLeadingPadding)
+                            WalkingMascot(tool: walker, runway: NotchLayout.mascotLaneWidth)
+                            Spacer(minLength: layout.leftStatusWingTrailingPadding)
+                        }
+                    } else if showsIdleMark {
                         // Quiet empty state: the app is awake but no agent
                         // is running.
                         Image(systemName: "moon.zzz.fill")
@@ -381,6 +394,9 @@ struct NotchWidgetView: View {
                     HStack(spacing: 0) {
                         Spacer(minLength: layout.leftStatusWingLeadingPadding)
                         HStack(spacing: NotchLayout.statusIndicatorSpacing) {
+                            if let walker {
+                                WalkingMascot(tool: walker, runway: NotchLayout.mascotLaneWidth)
+                            }
                             ForEach(leftEntries) { entry in
                                 StatusSummaryIndicator(kind: entry.kind, count: entry.count)
                             }

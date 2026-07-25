@@ -164,6 +164,13 @@ public struct NotchLayout: Equatable, Sendable {
     /// Gap between adjacent indicators; shared by the width formula and the
     /// view so both always agree.
     public static let statusIndicatorSpacing: CGFloat = 6
+    /// Trajeto do mascote, na ala esquerda.
+    ///
+    /// Uma criatura de 15 pt precisa de mais do que uma ranhura de indicador
+    /// para se ver que ANDA: com 46 pt sobram 31 de passeio, que a 3,2 s por
+    /// travessia dá uma passada calma. Mais estreito lia-se como tremor no
+    /// sítio; mais largo empurrava as contagens para cima do ombro.
+    public static let mascotLaneWidth: CGFloat = 46
     /// Breathing room at each end of a virtual-pill status wing. The slot
     /// centering already leaves ~4-5pt of slack beside the outermost glyph,
     /// so the explicit inset stays slim to keep the capsule snug.
@@ -240,16 +247,19 @@ public struct NotchLayout: Equatable, Sendable {
         visibleIndicatorCount: Int,
         showsIdleMark: Bool,
         leadingPadding: CGFloat,
-        trailingPadding: CGFloat
+        trailingPadding: CGFloat,
+        showsMascot: Bool = false
     ) -> CGFloat {
         let leading = leadingPadding.isFinite ? max(0, leadingPadding) : 0
         let trailing = trailingPadding.isFinite ? max(0, trailingPadding) : 0
+        let lane = showsMascot ? mascotLaneWidth + statusIndicatorSpacing : 0
         guard visibleIndicatorCount > 0 else {
-            return showsIdleMark ? max(46, 28 + leading + trailing) : 0
+            let empty = showsIdleMark ? max(46, 28 + leading + trailing) : 0
+            return lane > 0 ? lane + leading + trailing : empty
         }
         return CGFloat(visibleIndicatorCount) * statusIndicatorSlotWidth
             + CGFloat(max(visibleIndicatorCount - 1, 0)) * statusIndicatorSpacing
-            + leading + trailing
+            + lane + leading + trailing
     }
 
     /// Side-aware status-wing width. Keeping the side explicit prevents the
@@ -257,7 +267,8 @@ public struct NotchLayout: Equatable, Sendable {
     public func statusWingWidth(
         side: StatusWingSide,
         visibleIndicatorCount: Int,
-        showsIdleMark: Bool
+        showsIdleMark: Bool,
+        showsMascot: Bool = false
     ) -> CGFloat {
         let leadingPadding: CGFloat
         let trailingPadding: CGFloat
@@ -273,7 +284,8 @@ public struct NotchLayout: Equatable, Sendable {
             visibleIndicatorCount: visibleIndicatorCount,
             showsIdleMark: showsIdleMark,
             leadingPadding: leadingPadding,
-            trailingPadding: trailingPadding
+            trailingPadding: trailingPadding,
+            showsMascot: showsMascot
         )
     }
 
