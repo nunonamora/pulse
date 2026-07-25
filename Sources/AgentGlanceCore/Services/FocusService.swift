@@ -42,7 +42,7 @@ public enum FocusPlanner {
 
     /// A aplicação dona do terminal, descoberta pelo tty ou pelo próprio
     /// processo do agente.
-    private static func fallbackAction(for session: AgentSession) -> FocusAction? {
+    static func fallbackAction(for session: AgentSession) -> FocusAction? {
         if let tty = session.terminal.tty,
            let pid = TerminalOwner.applicationPID(forTTY: tty) {
             return .activate(pid: pid)
@@ -192,8 +192,24 @@ public enum FocusPlanner {
 }
 
 public enum FocusService {
+    /// Foca a sessão, com recurso a trazer a aplicação à frente.
+    ///
+    /// O recurso tem de cobrir os dois momentos em que isto falha, e não só o
+    /// primeiro:
+    ///
+    /// 1. **A planear** — nenhum terminal conhecido, nenhum alvo. Já estava
+    ///    tratado.
+    /// 2. **A correr** — havia alvo mas ele não existe. É o caso de uma sessão
+    ///    que anuncia `TERM_PROGRAM=ghostty` mas vive dentro de outra app: o
+    ///    plano sai limpo, o AppleScript corre, não encontra janela nenhuma, e
+    ///    a app respondia com a linha vermelha. Era aqui que ficava.
     public static func focus(_ session: AgentSession) throws {
-        try FocusActionRunner.run(FocusPlanner.actions(for: session))
+        do {
+            try FocusActionRunner.run(FocusPlanner.actions(for: session))
+        } catch {
+            guard let fallback = FocusPlanner.fallbackAction(for: session) else { throw error }
+            try FocusActionRunner.run([fallback])
+        }
     }
 }
 
