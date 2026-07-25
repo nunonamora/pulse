@@ -171,6 +171,12 @@ public struct NotchLayout: Equatable, Sendable {
     /// do canto do olho. Uma versão anterior dava-lhe 46 e o dobro do curso —
     /// na periferia da visão isso deixa de ser detalhe e passa a ser distração.
     public static let mascotLaneWidth: CGFloat = 34
+    /// Distância entre o mascote e o bordo preto da barra.
+    ///
+    /// O ombro da silhueta curva para dentro por baixo do topo, por isso o
+    /// bordo não é uma linha reta — 8 pt garantem que ele nunca encosta à
+    /// curva nem a nenhuma altura do seu corpo.
+    public static let mascotBarGap: CGFloat = 8
     /// Breathing room at each end of a virtual-pill status wing. The slot
     /// centering already leaves ~4-5pt of slack beside the outermost glyph,
     /// so the explicit inset stays slim to keep the capsule snug.

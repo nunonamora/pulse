@@ -82,16 +82,14 @@ struct NotchWidgetView: View {
         // Quem anda na barra é quem está mesmo a trabalhar. Sem trabalho, não
         // há mascote — a barra em repouso volta a ser só a barra.
         //
-        // Entra no cálculo da ala esquerda: tem faixa própria a seguir às
-        // contagens, e a barra cresce para a acomodar em vez de o deixar andar
-        // por cima delas.
+        // Não entra no cálculo das larguras: anda por FORA da silhueta, e
+        // alargar a ala por causa dele só empurrava o preto para cima dele.
         let walker: AgentTool? = store.sessions
             .first { $0.status == .working }?.tool
         let naturalLeftWidth = layout.statusWingWidth(
             side: .left,
             visibleIndicatorCount: leftEntries.count,
-            showsIdleMark: showsIdleMark,
-            showsMascot: walker != nil
+            showsIdleMark: showsIdleMark
         )
         let naturalRightWidth = layout.statusWingWidth(
             side: .right,
@@ -116,6 +114,13 @@ struct NotchWidgetView: View {
         let menuContentWidth = NotchLayout.contentWidth(forExpandedPanelWidth: menuWidth)
             - 2 * layout.expandedContentSideInset
         let headerWings = layout.expandedHeaderWingWidths()
+        // O passeio nunca pode sair da janela: o que passasse dela era cortado
+        // a meio, e um mascote decapitado ao fim do trajeto é pior do que um
+        // trajeto curto. `barLeadingOffset` é exatamente o que há à esquerda.
+        let mascotLane = max(0, min(
+            NotchLayout.mascotLaneWidth,
+            barLeadingOffset - NotchLayout.mascotBarGap - 4
+        ))
         let compactInteractiveFrame = DisplayFrame(
             minX: barLeadingOffset,
             minY: layout.topGap,
@@ -146,7 +151,8 @@ struct NotchWidgetView: View {
                                 showsIdleMark: showsIdleMark,
                                 walker: walker,
                                 leftWidth: leftWidth,
-                                rightWidth: rightWidth
+                                rightWidth: rightWidth,
+                                mascotLane: mascotLane
                             )
                             .contentShape(silhouette)
                         }
@@ -371,7 +377,8 @@ struct NotchWidgetView: View {
         showsIdleMark: Bool,
         walker: AgentTool?,
         leftWidth: CGFloat,
-        rightWidth: CGFloat
+        rightWidth: CGFloat,
+        mascotLane: CGFloat
     ) -> some View {
         // Wings span the full bar height so the click targets reach the top
         // edge of the screen — the natural place to slam the pointer. Only
@@ -394,15 +401,6 @@ struct NotchWidgetView: View {
                     HStack(spacing: 0) {
                         Spacer(minLength: layout.leftStatusWingLeadingPadding)
                         HStack(spacing: NotchLayout.statusIndicatorSpacing) {
-                            // Antes das contagens, e não depois: o mascote e o
-                            // spinner braille dizem a mesma coisa por meios
-                            // diferentes — quem trabalha, e quantos. Separados
-                            // pela contagem de inativos liam-se como dois
-                            // assuntos; encostados leem-se como um.
-                            if let walker {
-                                WalkingMascot(tool: walker)
-                                    .allowsHitTesting(false)
-                            }
                             ForEach(leftEntries) { entry in
                                 StatusSummaryIndicator(kind: entry.kind, count: entry.count)
                             }
@@ -431,16 +429,26 @@ struct NotchWidgetView: View {
             }
             .frame(width: rightWidth, height: layout.height, alignment: .trailing)
         }
-        // O mascote anda na ALA ESQUERDA, encostado ao braille.
+        // O mascote anda À ESQUERDA da barra, por fora do preto.
         //
-        // Andou pelo centro durante uma versão: entrava por trás do recorte da
-        // câmara de um lado e saía do outro, o que era bonito de descrever e
-        // ilegível de ver — metade do passeio acontecia onde não há pixels, e o
-        // olho não vai ao meio da barra à procura de nada.
+        // Nada nesta pilha clipa a linha da barra à silhueta, e o painel tem
+        // 800 pt centrados no recorte — a barra ocupa uns 350 ao meio, por isso
+        // sobra folga larga de cada lado, dentro da janela e por cima de nada.
         //
-        // Ao lado das contagens está onde se olha de qualquer maneira, e o
-        // trajeto curto (`mascotLaneWidth`) faz dele um detalhe vivo em vez de
-        // uma coisa que atravessa o campo de visão.
+        // Dentro da faixa preta ele era mais uma coisa arrumada numa régua de
+        // indicadores. Fora dela deixa de ter caixa: passeia sobre a menu bar e
+        // o wallpaper, e é a única coisa nesta app que não vive num campo.
+        //
+        // Continua colado ao spinner braille — só do outro lado do bordo. Os
+        // dois dizem a mesma coisa por meios diferentes: quem trabalha, e
+        // quantos.
+        .overlay(alignment: .leading) {
+            if let walker {
+                WalkingMascot(tool: walker, runway: mascotLane)
+                    .offset(x: -(mascotLane + NotchLayout.mascotBarGap))
+                    .allowsHitTesting(false)
+            }
+        }
     }
 
     /// Expanded replacement for the compact bar row: the menu header claims

@@ -57,26 +57,52 @@ struct WalkingMascot: View {
         }
     }
 
+    /// Contorno escuro à volta de cada pixel.
+    ///
+    /// Dentro da faixa preta ele tinha contraste garantido de graça. Por fora
+    /// não tem nenhum: sobre um wallpaper alaranjado o coral desaparecia. O
+    /// rebordo é o que o torna independente do que estiver por baixo, e a
+    /// 0,7 pt lê-se como definição do desenho e não como sombra colada.
+    private var rim: CGFloat { 0.7 }
+
     private var spriteWidth: CGFloat {
-        cell * CGFloat(MascotArt.frames(for: tool)[0][0].count)
+        cell * CGFloat(MascotArt.frames(for: tool)[0][0].count) + rim * 2
     }
 
     private func sprite(frame: Int) -> some View {
         let bitmap = MascotArt.frames(for: tool)[frame % 2]
         return Canvas { context, _ in
-            for (row, line) in bitmap.enumerated() {
-                for (column, character) in line.enumerated() where character != "." {
-                    context.fill(
-                        Path(CGRect(
-                            x: CGFloat(column) * cell, y: CGFloat(row) * cell,
-                            width: cell, height: cell
-                        )),
-                        with: .color(character == "#" ? MascotArt.color(tool) : MascotArt.shade(tool))
-                    )
+            // Uma passagem para o contorno e uma por cor, cada uma num único
+            // caminho com todos os seus retângulos.
+            //
+            // Um `fill` por célula deixava uma grelha escura dentro do corpo: a
+            // célula mede 2,2 pt, nunca assenta em pixels inteiros, e cada
+            // preenchimento antialiasado punha meia transparência na costura
+            // por onde o contorno de baixo aparecia. Juntos no mesmo caminho,
+            // os retângulos preenchem como uma região só e não há costura
+            // nenhuma para atravessar.
+            func region(_ include: (Character) -> Bool, inset: CGFloat) -> Path {
+                var path = Path()
+                for (row, line) in bitmap.enumerated() {
+                    for (column, character) in line.enumerated()
+                    where character != "." && include(character) {
+                        path.addRect(
+                            CGRect(
+                                x: rim + CGFloat(column) * cell,
+                                y: rim + CGFloat(row) * cell,
+                                width: cell, height: cell
+                            ).insetBy(dx: inset, dy: inset)
+                        )
+                    }
                 }
+                return path
             }
+
+            context.fill(region({ _ in true }, inset: -rim), with: .color(.black.opacity(0.55)))
+            context.fill(region({ $0 == "#" }, inset: 0), with: .color(MascotArt.color(tool)))
+            context.fill(region({ $0 == "+" }, inset: 0), with: .color(MascotArt.shade(tool)))
         }
-        .frame(width: spriteWidth, height: cell * CGFloat(bitmap.count))
+        .frame(width: spriteWidth, height: cell * CGFloat(bitmap.count) + rim * 2)
     }
 }
 
@@ -162,18 +188,29 @@ enum MascotArt {
         ] + legs.rows
     }
 
-    static func color(_ tool: AgentTool) -> Color {
+    private static func rgb(_ tool: AgentTool) -> (Double, Double, Double) {
         switch tool {
-        case .claude:   return Color(red: 0.85, green: 0.47, blue: 0.34)
-        case .codex:    return Color(red: 0.06, green: 0.64, blue: 0.50)
-        case .opencode: return Color(red: 0.37, green: 0.55, blue: 1.00)
-        case .pi:       return Color(red: 0.96, green: 0.45, blue: 0.71)
-        case .convoy:   return Color(red: 0.18, green: 0.83, blue: 0.75)
+        case .claude:   return (0.85, 0.47, 0.34)
+        case .codex:    return (0.06, 0.64, 0.50)
+        case .opencode: return (0.37, 0.55, 1.00)
+        case .pi:       return (0.96, 0.45, 0.71)
+        case .convoy:   return (0.18, 0.83, 0.75)
         }
     }
 
+    static func color(_ tool: AgentTool) -> Color {
+        let (r, g, b) = rgb(tool)
+        return Color(red: r, green: g, blue: b)
+    }
+
     /// As pernas, um pouco mais escuras: dão volume sem competir com o corpo.
+    ///
+    /// Escurecidas na própria cor e não com opacidade. Translúcidas, deixavam
+    /// passar o contorno preto e saíam lamacentas em vez de sombreadas — a
+    /// transparência compõe com o que estiver por baixo, e por baixo está
+    /// justamente aquilo de que se queriam distinguir.
     static func shade(_ tool: AgentTool) -> Color {
-        color(tool).opacity(0.55)
+        let (r, g, b) = rgb(tool)
+        return Color(red: r * 0.62, green: g * 0.62, blue: b * 0.62)
     }
 }
