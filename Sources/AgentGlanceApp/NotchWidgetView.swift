@@ -375,13 +375,7 @@ struct NotchWidgetView: View {
         HStack(spacing: 0) {
             Group {
                 if leftEntries.isEmpty {
-                    if let walker {
-                        HStack(spacing: 0) {
-                            Spacer(minLength: layout.leftStatusWingLeadingPadding)
-                            WalkingMascot(tool: walker, runway: NotchLayout.mascotLaneWidth)
-                            Spacer(minLength: layout.leftStatusWingTrailingPadding)
-                        }
-                    } else if showsIdleMark {
+                    if showsIdleMark {
                         // Quiet empty state: the app is awake but no agent
                         // is running.
                         Image(systemName: "moon.zzz.fill")
@@ -394,9 +388,6 @@ struct NotchWidgetView: View {
                     HStack(spacing: 0) {
                         Spacer(minLength: layout.leftStatusWingLeadingPadding)
                         HStack(spacing: NotchLayout.statusIndicatorSpacing) {
-                            if let walker {
-                                WalkingMascot(tool: walker, runway: NotchLayout.mascotLaneWidth)
-                            }
                             ForEach(leftEntries) { entry in
                                 StatusSummaryIndicator(kind: entry.kind, count: entry.count)
                             }
@@ -424,6 +415,24 @@ struct NotchWidgetView: View {
                 }
             }
             .frame(width: rightWidth, height: layout.height, alignment: .trailing)
+        }
+        // O mascote atravessa o CENTRO, e não uma ala.
+        //
+        // O meio da barra é o recorte físico da câmara: não há pixels lá, e o
+        // que se desenhar naquele intervalo simplesmente não se vê. Em vez de
+        // ser um problema, é o efeito — ele entra por trás do recorte de um
+        // lado e sai do outro, como quem passa por trás de uma coluna.
+        //
+        // A faixa é mais larga do que o notch para haver passeio visível dos
+        // dois lados, e fica atrás das contagens, que vivem nas pontas.
+        .overlay {
+            if let walker {
+                WalkingMascot(
+                    tool: walker,
+                    runway: layout.notchWidth + NotchLayout.mascotLaneWidth * 2
+                )
+                .allowsHitTesting(false)
+            }
         }
     }
 
