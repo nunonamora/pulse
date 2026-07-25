@@ -5,9 +5,12 @@ import AgentGlanceCore
 /// O cartão que te deixa decidir sem sair do editor.
 ///
 /// Enquanto está aberto, do outro lado há um processo de hook bloqueado e um
-/// agente parado à espera desta resposta — daí a barra de prazo. É a única
-/// superfície da app onde o tempo corre contra ti, e por isso é a única que
-/// o mostra.
+/// agente parado à espera desta resposta.
+///
+/// Desenhado para o orçamento de altura do painel (`maximumCardHeight`, 316 pt)
+/// e para a métrica da casa: os mesmos tamanhos de tipo das linhas de sessão,
+/// os mesmos recuos, os mesmos botões. Um cartão que se lê como outra app é um
+/// cartão que parece um remendo.
 struct PermissionDecisionCard: View {
     let request: PermissionRequest
     let now: Date
@@ -24,101 +27,120 @@ struct PermissionDecisionCard: View {
         }
     }
 
+    /// O poço do comando encolhe para caber o botão de "permitir sempre"
+    /// quando ele existe — o orçamento é fixo e alguma coisa tem de ceder.
+    private var payloadHeight: CGFloat { hasAlwaysOption ? 104 : 144 }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             header
             if let detail = request.detail, !detail.isEmpty {
                 payload(detail)
             }
             actions
-            deadline
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 12)
-        .padding(.bottom, 10)
+        .padding(.horizontal, SessionMenuLayout.sessionRowLeadingInset)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .overlay(alignment: .bottom) { deadline }
     }
 
     // MARK: - Cabeçalho
 
+    /// Os mesmos dois níveis de uma linha de sessão: o que é, e onde.
     private var header: some View {
-        HStack(spacing: 8) {
-            Text(request.summary)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.92))
-                .lineLimit(1)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(request.summary)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.95))
+                    .lineLimit(1)
 
-            Spacer(minLength: 8)
+                Spacer(minLength: 8)
 
-            Text("\(remaining)s")
-                .font(.system(size: 10.5, design: .monospaced))
-                .monospacedDigit()
-                .foregroundStyle(remaining <= 20 ? Color.orange : .white.opacity(0.35))
+                Text("\(remaining)s")
+                    .font(.system(size: 11, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(remaining <= 20 ? Color.orange : .white.opacity(0.32))
+            }
+
+            HStack(spacing: 5) {
+                Image(systemName: "folder")
+                    .font(.system(size: 9.5))
+                Text(request.projectName)
+                Text("·")
+                Text(request.toolName)
+            }
+            .font(.system(size: 11, design: .monospaced))
+            .foregroundStyle(.white.opacity(0.42))
+            .lineLimit(1)
         }
-        .overlay(alignment: .bottomLeading) {
-            Text("\(request.projectName) · \(request.toolName)")
-                .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.35))
-                .lineLimit(1)
-                .offset(y: 15)
-        }
-        .padding(.bottom, 14)
     }
 
     // MARK: - Corpo
 
-    /// O comando, o diff ou o plano. Literal e em monoespaçado, porque um
-    /// comando mal lido é um comando mal aprovado.
+    /// O comando, literal e em monoespaçado: um comando mal lido é um comando
+    /// mal aprovado.
     private func payload(_ text: String) -> some View {
         ScrollView(.vertical, showsIndicators: false) {
             Text(text)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.85))
+                .font(.system(size: 11.5, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.88))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(9)
+                .padding(10)
         }
-        .frame(maxHeight: 92)
+        .frame(maxHeight: payloadHeight)
         .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(.white.opacity(0.06))
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.white.opacity(0.05))
         )
     }
 
     // MARK: - Ações
 
+    /// Permitir e negar lado a lado, em largura natural — é o idioma que o
+    /// `confirmingKill` já usa nesta app. A largura total por botão fazia-os
+    /// flutuar em campos vazios e afastava-os um do outro.
     private var actions: some View {
-        VStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                ActionListRow(label: "Allow", systemImage: "checkmark", fillsWidth: true) {
-                    decide(.allow)
-                }
+                ActionListRow(
+                    label: "Allow", systemImage: "checkmark", fillsWidth: false
+                ) { decide(.allow) }
+
                 ActionListRow(
                     label: "Deny", systemImage: "xmark",
-                    isDestructive: true, fillsWidth: true
-                ) {
-                    decide(.deny)
+                    isDestructive: true, fillsWidth: false
+                ) { decide(.deny) }
+
+                Spacer(minLength: 0)
+
+                Button {
+                    decide(.defer_)
+                    reveal()
+                } label: {
+                    Text("Decide in the terminal")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.38))
                 }
+                .buttonStyle(.plain)
             }
+
             if hasAlwaysOption {
                 ActionListRow(
-                    label: "Always allow this", systemImage: "checkmark.circle", fillsWidth: true
-                ) {
-                    decide(.allowAlways)
-                }
-            }
-            ActionListRow(
-                label: "Decide in the terminal", systemImage: "terminal", fillsWidth: true
-            ) {
-                decide(.defer_)
-                reveal()
+                    label: "Always allow this",
+                    systemImage: "checkmark.circle",
+                    fillsWidth: true
+                ) { decide(.allowAlways) }
             }
         }
     }
 
     // MARK: - Prazo
 
-    /// Quanto falta até o hook largar o agente por sua iniciativa. Encolhe da
-    /// direita para a esquerda e fica âmbar nos últimos vinte segundos.
+    /// Quanto falta até o hook largar o agente por sua iniciativa. Vive na
+    /// aresta de baixo do cartão e não rouba altura a nada.
     private var deadline: some View {
         GeometryReader { geo in
             let total = request.expiresAt.timeIntervalSince(request.createdAt)
@@ -126,11 +148,11 @@ struct PermissionDecisionCard: View {
                 ? max(0, request.expiresAt.timeIntervalSince(now) / total)
                 : 0
             Capsule()
-                .fill(remaining <= 20 ? Color.orange : .white.opacity(0.28))
+                .fill(remaining <= 20 ? Color.orange : .white.opacity(0.22))
                 .frame(width: max(0, geo.size.width * fraction))
                 .animation(.linear(duration: 1), value: fraction)
         }
         .frame(height: 2)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, SessionMenuLayout.sessionRowLeadingInset)
     }
 }

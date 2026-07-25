@@ -162,6 +162,7 @@ struct NotchWidgetView: View {
                             reveal: collapseMenu
                         )
                         .frame(width: menuContentWidth)
+                        .onAppear { decisionClock = Date() }
                         .onReceive(
                             Timer.publish(every: 1, on: .main, in: .common).autoconnect()
                         ) { decisionClock = $0 }
@@ -688,6 +689,18 @@ private struct StatusSummaryIndicator: View {
     let kind: SessionStatusSummary.StatusEntry.Kind
     let count: Int
 
+    /// Só um destes estados te pede alguma coisa.
+    ///
+    /// Antes os três pesavam o mesmo: três sessões paradas e uma à tua espera
+    /// liam-se igual. Agora quem precisa de ti tem ponto maior, halo e número
+    /// a peso cheio; quem está parado recua.
+    ///
+    /// A hierarquia é toda estática. Um pulsar resolveria isto num instante e
+    /// custaria caro: a barra de menus é visão periférica, e variação de brilho
+    /// aí é o mecanismo da fadiga — a mesma razão por que o anel das linhas
+    /// gira a luminância constante em vez de piscar.
+    private var needsYou: Bool { kind.indicatorStyle == .redDot }
+
     var body: some View {
         HStack(spacing: 3) {
             switch kind.indicatorStyle {
@@ -696,13 +709,24 @@ private struct StatusSummaryIndicator: View {
             case .greenDot, .redDot, .mutedDot:
                 Circle()
                     .fill(indicatorColor(for: kind.indicatorStyle))
-                    .frame(width: 8, height: 8)
+                    .frame(width: needsYou ? 9 : 7, height: needsYou ? 9 : 7)
+                    .background {
+                        if needsYou {
+                            Circle()
+                                .fill(indicatorColor(for: kind.indicatorStyle).opacity(0.22))
+                                .frame(width: 18, height: 18)
+                        }
+                    }
             }
             Text(count, format: .number)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .font(.system(
+                    size: 12,
+                    weight: needsYou ? .semibold : .regular,
+                    design: .rounded
+                ))
                 .monospacedDigit()
         }
-        .foregroundStyle(.white.opacity(0.94))
+        .foregroundStyle(.white.opacity(needsYou ? 1 : 0.55))
         // Fixed slot: the wing-width formula in NotchLayout adds up to
         // exactly the rendered bar, preserving each side's intended padding.
         .frame(width: NotchLayout.statusIndicatorSlotWidth)
