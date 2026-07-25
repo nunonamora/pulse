@@ -63,6 +63,8 @@ struct NotchWidgetView: View {
     @State private var rowInteractionActive = false
     /// Relógio do prazo do cartão de decisão; só corre enquanto ele existe.
     @State private var decisionClock = Date()
+    /// O painel foi aberto por um pedido de permissão? Então é ele que o fecha.
+    @State private var openedByDecision = false
     @State private var outsideClickMonitor: Any?
     @State private var latestMeasuredContentHeight: CGFloat = 0
 
@@ -80,15 +82,16 @@ struct NotchWidgetView: View {
         // Quem anda na barra é quem está mesmo a trabalhar. Sem trabalho, não
         // há mascote — a barra em repouso volta a ser só a barra.
         //
-        // Não entra no cálculo das larguras: ele anda em sobreposição sobre a
-        // silhueta que já existe, e alargar a ala por causa dele descentrava-a
-        // em relação ao recorte.
+        // Entra no cálculo da ala esquerda: tem faixa própria a seguir às
+        // contagens, e a barra cresce para a acomodar em vez de o deixar andar
+        // por cima delas.
         let walker: AgentTool? = store.sessions
             .first { $0.status == .working }?.tool
         let naturalLeftWidth = layout.statusWingWidth(
             side: .left,
             visibleIndicatorCount: leftEntries.count,
-            showsIdleMark: showsIdleMark
+            showsIdleMark: showsIdleMark,
+            showsMascot: walker != nil
         )
         let naturalRightWidth = layout.statusWingWidth(
             side: .right,
@@ -391,6 +394,15 @@ struct NotchWidgetView: View {
                     HStack(spacing: 0) {
                         Spacer(minLength: layout.leftStatusWingLeadingPadding)
                         HStack(spacing: NotchLayout.statusIndicatorSpacing) {
+                            // Antes das contagens, e não depois: o mascote e o
+                            // spinner braille dizem a mesma coisa por meios
+                            // diferentes — quem trabalha, e quantos. Separados
+                            // pela contagem de inativos liam-se como dois
+                            // assuntos; encostados leem-se como um.
+                            if let walker {
+                                WalkingMascot(tool: walker)
+                                    .allowsHitTesting(false)
+                            }
                             ForEach(leftEntries) { entry in
                                 StatusSummaryIndicator(kind: entry.kind, count: entry.count)
                             }
@@ -419,36 +431,16 @@ struct NotchWidgetView: View {
             }
             .frame(width: rightWidth, height: layout.height, alignment: .trailing)
         }
-        // O mascote atravessa o CENTRO, e não uma ala.
+        // O mascote anda na ALA ESQUERDA, encostado ao braille.
         //
-        // O meio da barra é o recorte físico da câmara: não há pixels lá, e o
-        // que se desenhar naquele intervalo simplesmente não se vê. Em vez de
-        // ser um problema, é o efeito — ele entra por trás do recorte de um
-        // lado e sai do outro, como quem passa por trás de uma coluna.
+        // Andou pelo centro durante uma versão: entrava por trás do recorte da
+        // câmara de um lado e saía do outro, o que era bonito de descrever e
+        // ilegível de ver — metade do passeio acontecia onde não há pixels, e o
+        // olho não vai ao meio da barra à procura de nada.
         //
-        // A faixa é mais larga do que o notch para haver passeio visível dos
-        // dois lados, e fica atrás das contagens, que vivem nas pontas.
-        .overlay {
-            if let walker {
-                // Duas correções ao primeiro tento:
-                //
-                // 1. O trajeto era fixo em notch + 2 faixas, e podia ser mais
-                //    largo do que a silhueta preta — o mascote saía do preto e
-                //    ia andar por cima da menu bar. Agora o passeio de cada
-                //    lado nunca passa a ala mais estreita.
-                // 2. Estava centrado na BARRA e não no NOTCH. Como as alas têm
-                //    larguras diferentes, o centro da barra não é o centro do
-                //    recorte: ele passava ao lado da câmara em vez de por trás
-                //    dela, e saía torto dos dois lados.
-                let margin = min(leftWidth, rightWidth, NotchLayout.mascotLaneWidth)
-                let barWidth = leftWidth + layout.notchWidth + rightWidth
-                let notchCentre = leftWidth + layout.notchWidth / 2
-
-                WalkingMascot(tool: walker, runway: layout.notchWidth + margin * 2)
-                    .offset(x: notchCentre - barWidth / 2)
-                    .allowsHitTesting(false)
-            }
-        }
+        // Ao lado das contagens está onde se olha de qualquer maneira, e o
+        // trajeto curto (`mascotLaneWidth`) faz dele um detalhe vivo em vez de
+        // uma coisa que atravessa o campo de visão.
     }
 
     /// Expanded replacement for the compact bar row: the menu header claims
@@ -641,9 +633,19 @@ struct NotchWidgetView: View {
     /// Um pedido de permissão abre o painel por si. Do outro lado há um
     /// processo bloqueado — esperar que passes o rato por cima seria esperar
     /// por acaso.
+    ///
+    /// E fecha-o quando o pedido se resolve, se tiver sido ele a abri-lo. Sem
+    /// isto o painel ficava aberto para sempre depois de decidires: quem o
+    /// fecha normalmente é a saída do rato, e o rato nunca lá esteve.
     private func presentPendingDecision(_ isPending: Bool) {
-        guard isPending else { return }
-        openMenu()
+        if isPending {
+            openedByDecision = !isExpanded
+            openMenu()
+        } else if openedByDecision {
+            openedByDecision = false
+            guard !isHoveringPanel else { return }
+            collapseMenu()
+        }
     }
 
     private func updateOutsideClickMonitor(menuIsVisible: Bool) {

@@ -20,8 +20,8 @@ import AgentGlanceCore
 struct WalkingMascot: View {
     let tool: AgentTool
     /// Largura do trajeto. A criatura vai até à ponta, vira-se e volta.
-    var runway: CGFloat = 30
-    var cell: CGFloat = 1.6
+    var runway: CGFloat = NotchLayout.mascotLaneWidth
+    var cell: CGFloat = 2.2
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -29,7 +29,7 @@ struct WalkingMascot: View {
     /// como tremor.
     private static let step: TimeInterval = 0.16
     /// Quanto tempo demora a atravessar o trajeto de uma ponta à outra.
-    private static let crossing: TimeInterval = 3.2
+    private static let crossing: TimeInterval = 2.6
 
     var body: some View {
         if reduceMotion {
@@ -98,138 +98,69 @@ enum MascotArt {
         }
     }
 
-    /// Corpo cheio com orelhas, olhos e pernas.
+    /// Um esqueleto comum: coroa, corpo de seis linhas, duas de pernas.
     ///
-    /// Uma primeira versão desenhava a estrela de oito pontas da marca. Ficava
-    /// bonita ampliada e, ao tamanho real, os braços da estrela liam-se como
-    /// pixels soltos a flutuar ao lado do corpo — ruído, não desenho. A esta
-    /// escala a silhueta é tudo: um corpo fechado com dois olhos lê-se, uma
-    /// estrela não.
+    /// Só a coroa e os olhos mudam por ferramenta. A esta escala a silhueta é
+    /// quase tudo o que se lê em movimento, e cinco silhuetas diferentes seriam
+    /// cinco criaturas sem parentesco — o que muda tem de ser o detalhe, não a
+    /// forma.
+    ///
+    /// Os olhos são buracos, não pixels escuros: sobre a barra preta o fundo
+    /// faz-lhes o trabalho. Ficam recuados uma célula da margem. Uma versão
+    /// anterior punha-os na borda e abria uma fenda de três células debaixo
+    /// deles; ampliada parecia um rosto, ao tamanho real lia-se como uma boca
+    /// escancarada e o desenho perdia os olhos.
     private static let claude: [Bitmap] = [
-        [
-            "..#...#..",
-            ".#######.",
-            "#########",
-            "#.#####.#",
-            "#.#...#.#",
-            ".#######.",
-            "..#####..",
-            "...+.+...",
-            "..+...+..",
-        ],
-        [
-            "..#...#..",
-            ".#######.",
-            "#########",
-            "#.#####.#",
-            "#.#...#.#",
-            ".#######.",
-            "..#####..",
-            "...+++...",
-            "...+.+...",
-        ],
+        crown("..#...#..", legs: .stride),   // orelhas
+        crown("..#...#..", legs: .passing),
     ]
 
-    /// Célula hexagonal.
     private static let codex: [Bitmap] = [
-        [
-            "..#####..",
-            ".#.....#.",
-            "#..###..#",
-            "#.#...#.#",
-            "#..###..#",
-            ".#.....#.",
-            "..#####..",
-            "...+.+...",
-            "..+...+..",
-        ],
-        [
-            "..#####..",
-            ".#.....#.",
-            "#..###..#",
-            "#.#####.#",
-            "#..###..#",
-            ".#.....#.",
-            "..#####..",
-            "...+++...",
-            "...+.+...",
-        ],
+        crown("..#####..", legs: .stride),
+        crown("..#####..", legs: .passing),
     ]
 
     private static let opencode: [Bitmap] = [
-        [
-            ".##...##.",
-            "##..#..##",
-            "#..###..#",
-            "..#####..",
-            "#..###..#",
-            "##..#..##",
-            ".##...##.",
-            "...+.+...",
-            "..+...+..",
-        ],
-        [
-            ".##...##.",
-            "##..#..##",
-            "#..###..#",
-            ".#######.",
-            "#..###..#",
-            "##..#..##",
-            ".##...##.",
-            "...+++...",
-            "...+.+...",
-        ],
+        crown(".##...##.", legs: .stride),
+        crown(".##...##.", legs: .passing),
     ]
 
     private static let pi: [Bitmap] = [
-        [
-            ".#######.",
-            "..#...#..",
-            "..#...#..",
-            "..#...#..",
-            "..#...#..",
-            ".##...#..",
-            "........",
-            "...+.+...",
-            "..+...+..",
-        ],
-        [
-            ".#######.",
-            "..#...#..",
-            "..#...#..",
-            "..#...#..",
-            "..#...#..",
-            ".##...##.",
-            "........",
-            "...+++...",
-            "...+.+...",
-        ],
+        crown("....#....", legs: .stride),   // antena
+        crown("....#....", legs: .passing),
     ]
 
     private static let convoy: [Bitmap] = [
-        [
-            "..#####..",
-            ".#######.",
-            "#.#...#.#",
-            "#.......#",
-            "#.#...#.#",
-            ".#######.",
-            "..#####..",
-            "...+.+...",
-            "..+...+..",
-        ],
-        [
-            "..#####..",
-            ".#######.",
-            "#.#...#.#",
-            "#..###..#",
-            "#.#...#.#",
-            ".#######.",
-            "..#####..",
-            "...+++...",
-            "...+.+...",
-        ],
+        crown("...###...", legs: .stride),
+        crown("...###...", legs: .passing),
     ]
+
+    private enum Legs {
+        /// Pernas afastadas: o momento em que um pé assenta.
+        case stride
+        /// Pernas juntas: o momento em que uma passa pela outra. Alternar entre
+        /// as duas, com o corpo a subir um pixel na segunda, é o mínimo que
+        /// se lê como andar em vez de deslizar.
+        case passing
+
+        var rows: [String] {
+            switch self {
+            case .stride:  return ["..+...+..", "..+...+.."]
+            case .passing: return ["...+.+...", "...+.+..."]
+            }
+        }
+    }
+
+    private static func crown(_ top: String, legs: Legs) -> Bitmap {
+        [
+            top,
+            ".#######.",
+            "##.###.##",   // olhos recuados, ombros a sair para fora
+            "#########",
+            ".#######.",
+            "..#####..",
+        ] + legs.rows
+    }
 
     static func color(_ tool: AgentTool) -> Color {
         switch tool {

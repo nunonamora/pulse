@@ -166,11 +166,11 @@ public struct NotchLayout: Equatable, Sendable {
     public static let statusIndicatorSpacing: CGFloat = 6
     /// Trajeto do mascote, na ala esquerda.
     ///
-    /// Uma criatura de 15 pt precisa de mais do que uma ranhura de indicador
-    /// para se ver que ANDA: com 46 pt sobram 31 de passeio, que a 3,2 s por
-    /// travessia dá uma passada calma. Mais estreito lia-se como tremor no
-    /// sítio; mais largo empurrava as contagens para cima do ombro.
-    public static let mascotLaneWidth: CGFloat = 46
+    /// Uma criatura de 20 pt com 34 de faixa tem 14 de passeio: chega para se
+    /// ver que anda e para o virar de costas se ler, sem que o movimento saia
+    /// do canto do olho. Uma versão anterior dava-lhe 46 e o dobro do curso —
+    /// na periferia da visão isso deixa de ser detalhe e passa a ser distração.
+    public static let mascotLaneWidth: CGFloat = 34
     /// Breathing room at each end of a virtual-pill status wing. The slot
     /// centering already leaves ~4-5pt of slack beside the outermost glyph,
     /// so the explicit inset stays slim to keep the capsule snug.
