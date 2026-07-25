@@ -61,13 +61,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "attentionSoundEnabled": true,
             "turnCompleteSoundEnabled": true,
             "screenSelectionMode": ScreenSelectionMode.pointer.rawValue,
+            // A voz. Sem registo aqui, um @AppStorage a true mostra true na
+            // interface mas qualquer leitura por bool(forKey:) fora da view
+            // devolve false — e a voz nunca falava.
+            "voiceEnabled": false,
+            "voiceOnTurnComplete": true,
+            "voiceOnAttention": true,
+            "voiceSilentOnCall": true,
         ])
-        store.onAttentionRaised = { _ in
-            guard UserDefaults.standard.bool(forKey: "attentionSoundEnabled") else { return }
+        // A linguagem de dois sons continua igual; a voz entra por cima dela,
+        // e traz o que um som não consegue: QUEM e ONDE. Quando fala, o som
+        // fica de fora — os dois juntos seriam redundantes e mais barulhentos.
+        store.onAttentionRaised = { sessions in
+            let spoke = Voice.shared.announceAttention(sessions)
+            guard !spoke, UserDefaults.standard.bool(forKey: "attentionSoundEnabled") else { return }
             NSSound.beep()
         }
-        store.onTurnCompleted = { _ in
-            guard UserDefaults.standard.bool(forKey: "turnCompleteSoundEnabled") else { return }
+        store.onTurnCompleted = { sessions in
+            let spoke = Voice.shared.announceTurnComplete(sessions)
+            guard !spoke, UserDefaults.standard.bool(forKey: "turnCompleteSoundEnabled") else { return }
             NSSound(named: "Tink")?.play()
         }
         // Capture scheduler sources first, then build Convoy ownership and
@@ -95,6 +107,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let focusObserver = FocusAcknowledgmentObserver(store: store)
             self.focusAcknowledgmentObserver = focusObserver
             focusObserver.start()
+            // Pré-aquecer só agora: a primeira frase do dia chega uns 300 ms
+            // atrasada com o sintetizador frio, e desencontrava-se do som de
+            // assinatura que a antecede.
+            Voice.shared.prewarm()
         }
     }
 

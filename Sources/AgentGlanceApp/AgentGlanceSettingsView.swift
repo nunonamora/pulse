@@ -8,6 +8,10 @@ struct AgentGlanceSettingsView: View {
     @AppStorage("hideWhenEmpty") private var hideWhenEmpty = false
     @AppStorage("attentionSoundEnabled") private var attentionSoundEnabled = true
     @AppStorage("turnCompleteSoundEnabled") private var turnCompleteSoundEnabled = true
+    @AppStorage("voiceEnabled") private var voiceEnabled = false
+    @AppStorage("voiceOnAttention") private var voiceOnAttention = true
+    @AppStorage("voiceOnTurnComplete") private var voiceOnTurnComplete = true
+    @AppStorage("voiceSilentOnCall") private var voiceSilentOnCall = true
     @AppStorage("screenSelectionMode") private var screenSelectionMode = ScreenSelectionMode.pointer.rawValue
     @AppStorage("glassFrostRadiusNotch") private var notchFrostRadius = NotchGlassStyle.defaultFrostRadius
     @AppStorage("glassTintOpacityNotch") private var notchTintOpacity = NotchGlassStyle.defaultTintOpacity
@@ -15,6 +19,21 @@ struct AgentGlanceSettingsView: View {
     @AppStorage("glassTintOpacityPill") private var pillTintOpacity = NotchGlassStyle.defaultTintOpacity
     @State private var loginItemEnabled = SMAppService.mainApp.status == .enabled
     @State private var errorMessage: String?
+
+    /// O que a voz faz e, sobretudo, o que ela NÃO faz — é a parte que decide
+    /// se isto se aguenta um dia inteiro.
+    private var voiceFooter: String {
+        var text = "Each tool gets its own signature chime and voice pitch. "
+            + "Voice replaces the sound for that event rather than adding to it. "
+            + "It stays quiet during Do Not Disturb and Focus, and while you are looking "
+            + "at that session's terminal. At most one sentence every four seconds — "
+            + "anything that piles up collapses into a count."
+        if VoiceCatalog.shared.needsBetterVoices {
+            text += "\n\nOnly a basic Portuguese voice is installed, so every tool will "
+                + "sound alike; the signature chime carries the identity until you add more."
+        }
+        return text
+    }
 
     var body: some View {
         Form {
@@ -41,6 +60,37 @@ struct AgentGlanceSettingsView: View {
             Section("Sounds") {
                 Toggle("Play the alert sound when a session needs you", isOn: $attentionSoundEnabled)
                 Toggle("Play a soft sound when a session finishes its turn", isOn: $turnCompleteSoundEnabled)
+            }
+
+            Section {
+                Toggle("Speak session events out loud", isOn: $voiceEnabled)
+                if voiceEnabled {
+                    Toggle("Speak when a session needs you", isOn: $voiceOnAttention)
+                    Toggle("Speak when a session finishes its turn", isOn: $voiceOnTurnComplete)
+                    Toggle("Stay quiet while the microphone is in use", isOn: $voiceSilentOnCall)
+                    HStack {
+                        Button("Hear each tool") { Voice.shared.demo() }
+                        if Voice.shared.isMuted {
+                            Button("Unmute") { Voice.shared.unmute() }
+                        } else {
+                            Button("Mute for 30 minutes") { Voice.shared.mute(minutes: 30) }
+                        }
+                    }
+                    if VoiceCatalog.shared.needsBetterVoices {
+                        Button("Download better Portuguese voices…") {
+                            VoiceCatalog.shared.refresh()
+                            NSWorkspace.shared.open(URL(
+                                string: "x-apple.systempreferences:com.apple.preference.universalaccess?TextToSpeech"
+                            )!)
+                        }
+                    }
+                }
+            } header: {
+                Text("Voice")
+            } footer: {
+                if voiceEnabled {
+                    Text(voiceFooter)
+                }
             }
 
             Section {
