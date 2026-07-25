@@ -1,68 +1,63 @@
-<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AgentGlance app icon">
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Atalaia — a marca.
+
+  Um vigia a espreitar de dentro do recorte. A app vigia agentes e chama por
+  ti; a marca é a criatura que faz isso, não o gesto abstrato do som.
+
+  Desenhado para 16 px, não para 512: a cabeça ocupa mais de metade do quadro e
+  os olhos são o elemento de maior contraste de todo o ícone. Duas luzes claras
+  sobre escuro é a única coisa que se lê sem falhas na menu bar — e é também o
+  que dá presença: um ícone que olha de volta.
+
+  Versões anteriores, e porque morreram: três arcos concêntricos (o terceiro
+  desaparecia a 16 px); dois arcos com um ponto de luz (lia-se como cara triste,
+  o ponto virava nariz).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024"
+     role="img" aria-label="Atalaia">
   <defs>
-    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#33333f"/>
-      <stop offset="0.5" stop-color="#22222b"/>
-      <stop offset="1" stop-color="#15151a"/>
+    <linearGradient id="corpo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#26262B"/>
+      <stop offset="1" stop-color="#0A0A0C"/>
     </linearGradient>
-    <radialGradient id="yellowGlow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#f5c542" stop-opacity="0.4"/>
-      <stop offset="1" stop-color="#f5c542" stop-opacity="0"/>
+    <linearGradient id="cabeca" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFD07A"/>
+      <stop offset="1" stop-color="#D97757"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFC46B" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFC46B" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="redGlow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#ff5f57" stop-opacity="0.45"/>
-      <stop offset="1" stop-color="#ff5f57" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="yellowDot" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffd964"/>
-      <stop offset="1" stop-color="#e8b32e"/>
-    </linearGradient>
-    <linearGradient id="redDot" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ff7b74"/>
-      <stop offset="1" stop-color="#f04a42"/>
-    </linearGradient>
-    <linearGradient id="greenDot" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#4ee06a"/>
-      <stop offset="1" stop-color="#28b842"/>
-    </linearGradient>
-    <clipPath id="squircleClip">
-      <rect x="100" y="100" width="824" height="824" rx="184"/>
+    <clipPath id="moldura">
+      <rect x="96" y="96" width="832" height="832" rx="196" ry="196"/>
     </clipPath>
   </defs>
 
-  <!-- Screen (macOS squircle) -->
-  <rect x="100" y="100" width="824" height="824" rx="184" fill="url(#screen)"/>
-  <g clip-path="url(#squircleClip)">
-    <!-- Notch bar + session menu: the app's one-piece silhouette -->
-    <path d="M222 100 h580 v454 a66 66 0 0 1 -66 66 h-448 a66 66 0 0 1 -66 -66 z" fill="#000000"/>
+  <rect x="96" y="96" width="832" height="832" rx="196" ry="196" fill="url(#corpo)"/>
 
-    <!-- Camera -->
-    <circle cx="512" cy="156" r="18" fill="#131318" stroke="#26262e" stroke-width="4"/>
+  <g clip-path="url(#moldura)">
+    <circle cx="512" cy="600" r="330" fill="url(#halo)"/>
 
-    <!-- Left wing: waiting for a prompt -->
-    <circle cx="336" cy="156" r="104" fill="url(#yellowGlow)"/>
-    <circle cx="336" cy="156" r="38" fill="url(#yellowDot)"/>
+    <!-- O recorte, rente ao topo: é o sítio de onde ele espreita. -->
+    <path d="M 372 80 L 652 80 L 652 268 Q 652 322 598 322 L 426 322 Q 372 322 372 268 Z"
+          fill="#000000"/>
 
-    <!-- Right wing: needs you now, radar ping -->
-    <circle cx="688" cy="156" r="116" fill="url(#redGlow)"/>
-    <circle cx="688" cy="156" r="38" fill="url(#redDot)"/>
-    <circle cx="688" cy="156" r="66" fill="none" stroke="#ff5f57" stroke-width="9" opacity="0.32"/>
-
-    <!-- Menu rows: one session per state -->
-    <g>
-      <circle cx="316" cy="300" r="26" fill="url(#greenDot)"/>
-      <circle cx="316" cy="300" r="46" fill="none" stroke="#32d74b" stroke-width="7" opacity="0.3"/>
-      <rect x="376" y="282" width="304" height="36" rx="18" fill="#2b2b33"/>
-
-      <circle cx="316" cy="404" r="26" fill="url(#yellowDot)"/>
-      <rect x="376" y="386" width="240" height="36" rx="18" fill="#26262e"/>
-
-      <circle cx="316" cy="508" r="26" fill="url(#redDot)"/>
-      <rect x="376" y="490" width="272" height="36" rx="18" fill="#26262e"/>
+    <!-- As antenas, atrás da cabeça. -->
+    <g stroke="#8A6A52" stroke-width="26" stroke-linecap="round">
+      <path d="M 398 470 L 356 372"/>
+      <path d="M 626 470 L 668 372"/>
     </g>
+    <circle cx="352" cy="356" r="30" fill="#FFD07A"/>
+    <circle cx="672" cy="356" r="30" fill="#FFD07A"/>
 
-    <!-- Subtle top sheen -->
-    <path d="M100 100 h824 v64 c-260 36 -564 36 -824 0 z" fill="#ffffff" opacity="0.04"/>
+    <!-- A cabeça. Ocupa o quadro para sobreviver à escala. -->
+    <rect x="290" y="424" width="444" height="392" rx="150" ry="150" fill="url(#cabeca)"/>
+
+    <!-- Os olhos: o maior contraste do ícone, e o que se lê a 16 px. -->
+    <ellipse cx="418" cy="606" rx="52" ry="62" fill="#131316"/>
+    <ellipse cx="606" cy="606" rx="52" ry="62" fill="#131316"/>
+    <circle cx="434" cy="586" r="17" fill="#FFF2D4"/>
+    <circle cx="622" cy="586" r="17" fill="#FFF2D4"/>
   </g>
-  <rect x="102" y="102" width="820" height="820" rx="182" fill="none" stroke="#3e3e4a" stroke-width="4" opacity="0.7"/>
 </svg>

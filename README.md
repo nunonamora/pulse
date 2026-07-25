@@ -1,155 +1,144 @@
-<p align="center">
-  <img src="assets/header.svg" alt="AgentGlance — coding agent sessions at a glance, from the MacBook notch" width="760"/>
-</p>
+# Atalaia
 
-**Know when your coding agents need you—without leaving the notch.**
+Os teus agentes de código vigiados no notch do Mac — **com voz em português** e
+**decisões de permissão sem sair do editor**.
 
-AgentGlance is a quiet, native macOS indicator for Claude Code, OpenCode, Codex CLI, [Pi](https://github.com/badlogic/pi-mono), and [Convoy](https://github.com/Inakitajes/convoy) pipeline sessions. It lives around the MacBook notch (or as a pill on displays without one) and returns you to the exact terminal tab or tmux pane with one click.
+Atalaia é a torre de vigia em ponto alto: quem lá está observa e dá o alerta. É
+o que esta app faz, no sítio mais alto do ecrã.
 
-> **Preview status:** AgentGlance is pre-1.0 and currently distributed as source. The local build is ad-hoc signed; signed and notarized downloads will follow once the release pipeline is ready.
+> Derivado do [AgentGlance](https://github.com/Inakitajes/AgentGlance) de Josemi
+> Hernandez (MIT). Todo o motor — deteção de sessões, integrações com Claude
+> Code, Codex, OpenCode, Pi e Convoy, o painel do notch e o Liquid Glass — é
+> trabalho dele. O README original está em `README-agentglance-original.md`.
 
-## Why AgentGlance?
+## O que isto acrescenta ao original
 
-- See global counts for running, waiting, and blocked sessions without having to infer them from provider icons.
-- Click the status summary and its wide session menu grows out of the notch itself: provider, status light, session title taken from the live terminal tab, project directory, git branch (worktrees included) or Convoy pipeline step, and elapsed time.
-- Focus the recorded Ghostty, iTerm2, Terminal, or tmux session with one click.
-- Expand any row (chevron or right click) for inline actions: rename the session, copy the project path, reveal it in Finder, or kill the process — SIGTERM with SIGKILL escalation — and close its exact tmux pane or Ghostty tab.
-- Watch Convoy pipeline runs as first-class sessions: the current step in the row, red light on human gates, and no duplicate rows for the OpenCode sessions a pipeline owns.
-- Closed terminals disappear immediately through kernel exit notifications, with a five-second scanner/reaper backstop for missed hooks and stale state.
-- Follow the screen with the pointer by default, or choose the screen with the focused window in Settings.
-- Keep all observation and state on your Mac.
-- Run without telemetry, accounts, servers, or third-party Swift dependencies, at ~1% CPU and ~16 MB of memory.
+### Voz
 
-## Session states
+Quando um agente termina o turno ou precisa de ti, a app diz **quem** e
+**onde** — coisa que um som não consegue.
 
-| State | Meaning |
-| --- | --- |
-| Running | The agent is processing. |
-| Waiting | The session waits at the prompt for your next input. |
-| Blocked | A question, permission ask, or failed pipeline step needs you. |
+Cada ferramenta tem um som de assinatura próprio: duas notas, um intervalo
+musical, sintetizadas sem ficheiros de áudio. É o som e não a voz que dá a
+identidade — com uma só voz portuguesa instalada, as cinco ferramentas soariam
+iguais, e o intervalo chega ao ouvido primeiro.
 
-The compact bar shows a count for each state that actually exists right now — zero-count states leave no slot behind; the menu always shows the real status and provider per session.
+Quando a voz fala, o som do original **não** toca. Os dois juntos seriam
+redundantes e mais barulhentos do que qualquer um deles sozinho.
 
-## Requirements
+**Cala-se** em Não Incomodar e em modos de Concentração, enquanto o microfone
+estiver em uso, e quando estás a olhar para o terminal dessa sessão. No máximo
+uma frase a cada quatro segundos; o que se acumula colapsa numa contagem —
+*"Três agentes precisam de ti."*
 
-- macOS 14 Sonoma or newer;
-- a MacBook with a notch for the intended UI placement;
-- Swift 6.0 or newer to build from source;
-- Node.js 20+ to run the OpenCode and Pi behavioral tests;
-- Ghostty 1.3+ with AppleScript enabled, iTerm2, or Terminal.
+Vem desligada. Liga em **Definições → Voice**, onde há um botão para ouvires as
+cinco de seguida.
 
-Apple Silicon is the tested development platform. Intel builds have not yet been validated.
+#### Vozes
 
-## Install
+Por omissão o macOS traz só a **Joana** (pt-PT, qualidade básica), e com uma
+voz só as ferramentas soam quase iguais. Vale a pena descarregar em *Definições
+do Sistema → Acessibilidade → Conteúdo falado → Voz do sistema → Gerir vozes*:
 
-One command builds the app, installs it into `/Applications`, wires the agent hooks, launches it, and verifies everything:
+| Voz | Idioma | Tamanho |
+|---|---|---|
+| Catarina | pt-PT | 155 MB |
+| Felipe | pt-BR | 128 MB |
+
+A app deteta-as sozinha e redistribui — não é preciso configurar nada. Há um
+botão nas definições que te leva lá.
+
+### Decisões de permissão
+
+Quando o Claude Code pede autorização, o cartão aparece no notch com o comando
+e os botões. **Enquanto ele está aberto, o agente está mesmo parado à espera**
+— e é por isso que o cartão mostra um prazo a correr.
+
+| | |
+|---|---|
+| **Allow** | permite desta vez |
+| **Deny** | nega, com uma razão que o agente lê |
+| **Always allow this** | escreve a mesma regra que o botão do diálogo escreveria |
+| **Decide in the terminal** | larga o pedido; o diálogo normal aparece lá |
+
+Passados 150 segundos sem resposta, a app larga o agente por sua iniciativa e o
+diálogo aparece no terminal. Nunca se deixa um agente parado à espera de uma app
+que podes nem estar a ver.
+
+## Instalar
 
 ```bash
-git clone https://github.com/ixjosemi/AgentGlance.git
-cd AgentGlance
 ./scripts/install.sh
 ```
 
-The same command reinstalls: it stops the running instance, replaces the app, relaunches, and re-verifies. The bundle is ad-hoc signed for local use — do not redistribute it as an official release.
+Compila, instala em `/Applications`, liga os hooks, lança e verifica. O mesmo
+comando reinstala.
 
-Verify an existing installation at any time:
+## Como funciona por dentro
 
-```bash
-/Applications/AgentGlance.app/Contents/Resources/bin/agentglance doctor
+### A voz
+
+Pendurada nos `onAttentionRaised` / `onTurnCompleted` que o AgentGlance já
+tinha — é por lá que passam todas as transições de estado, e o *acknowledgment*
+dele garante que nada se repete a cada ciclo de leitura. Não foi preciso
+inventar mecanismo nenhum.
+
+### As decisões
+
+Esta precisou de um canal que não existia. O `StateChangeNotifier` do original é
+uma notificação Darwin sem payload e **estritamente unidirecional**: quem
+escreve estado avisa, a app ouve. Uma decisão precisa do contrário.
+
+O `PermissionBroker` acrescenta esse canal seguindo o precedente do
+`saveEnrichment`, onde a app já escreve um sidecar sobre um documento que
+pertence à integração:
+
+```
+o hook escreve   ~/.agentglance/state/decisions/<id>.request.json
+                 e bloqueia, a sondar
+a app responde   ~/.agentglance/state/decisions/<id>.reply.json
+o hook imprime   {"hookSpecificOutput":{…,"decision":{"behavior":"allow"}}}
 ```
 
-```
-✓ hook binaries: all executables present in ~/.agentglance/bin
-✓ state directory: ~/.agentglance/state exists
-✓ Claude Code hooks: all lifecycle hooks registered in ~/.claude/settings.json
-✓ OpenCode plugin: ~/.config/opencode/plugins/agentglance.js matches the bundled file
-✓ Codex notify: notify hook registered in ~/.codex/config.toml
-✓ Pi extension: ~/.pi/agent/extensions/agentglance.ts matches the bundled file
-```
+Dois ficheiros por pedido, escrita atómica por `tmp`+`rename`, num subdiretório
+próprio. Sem sockets nem portas — mantém o idioma da casa e sobrevive a
+reinícios da app sem deixar o agente pendurado.
 
-`doctor` is read-only and exits non-zero when something is broken, so it is also usable from scripts.
+### Notas de quem lá esteve
 
-### Manual build
+- O `PermissionRequest` **não estava registado** no original, e o merger do
+  `settings.json` não sabia escrever `timeout` — que é exatamente o que um hook
+  bloqueante precisa. Ambos acrescentados.
+- O script de hook fazia `>/dev/null 2>&1` e `exit 0` em todos os eventos, por
+  desenho. Agora só o `PermissionRequest` devolve stdout; os outros continuam
+  fire-and-forget, mais rápidos e sem forma de atrasar um agente.
+- O hook segura 150 s mas o `settings.json` regista 180: preferimos largar por
+  nossa iniciativa, com uma resposta limpa, a ser cortados a meio.
+- O painel tinha **quatro** comportamentos que matavam o cartão — escondia-se
+  sem sessões ativas, recolhia meio segundo depois de o rato sair, fechava a um
+  clique noutra app (incluindo o clique com que vais ao terminal ver o
+  contexto), e fechava se a lista esvaziasse. Todos protegidos, e todos pela
+  mesma razão: do outro lado há um agente parado.
 
-For development without touching `/Applications`:
+## O ícone
 
-```bash
-swift build
-swift run agentglance-tests
-./scripts/build-app.sh
-open .build/AgentGlance.app
-```
+Um vigia a espreitar do recorte, desenhado para 16 px e não para 512 — é
+pequeno que ele é visto. Duas versões anteriores morreram por isso: três arcos
+concêntricos, em que o terceiro desaparecia por completo; e dois arcos com um
+ponto de luz, que se lia como uma cara triste, com o ponto a virar nariz.
 
-### What the hook installer does
+Regenera-se com `./scripts/make-icon.sh` a partir de `assets/icon.svg`.
 
-Without integrations the app still detects running agents (via a fast libproc process scan), but every session shows as permanently working — the hooks are what feed real status changes. `install.sh` runs `agentglance install`, which:
+## Estado
 
-- installs the CLI and hook scripts under `~/.agentglance/bin`;
-- merges AgentGlance-owned Claude Code hooks into `~/.claude/settings.json`, preserving every existing setting and hook (the merge is idempotent);
-- installs `~/.config/opencode/plugins/agentglance.js` only when it can do so safely;
-- adds a Codex `notify` entry only when no notification command exists;
-- installs the Pi extension `~/.pi/agent/extensions/agentglance.ts` only when it can do so safely.
+A voz e as decisões estão implementadas e o mecanismo está provado ponta a
+ponta: o hook bloqueia mesmo, os quatro caminhos devolvem o JSON que o Claude
+Code espera, e não ficam ficheiros para trás.
 
-Installation fails instead of replacing an unknown AgentGlance-named plugin. Integration directories may be symlinks — common in dotfile setups — as long as they resolve to a directory you own inside your home; `~/.agentglance` itself must be symlink-free because hooks execute binaries from it. Agents started before installing need a restart to pick up the hooks. OpenCode additionally loads plugins in its detached background service, which survives TUI restarts — after installing, run `pkill -f "opencode2 serve"` once; the next `opencode` starts a fresh service with the plugin loaded.
+O que **não** está confirmado é o lado sensorial — se a voz se ouve e se o
+cartão aparece como deve. Isso só se sabe a usar.
 
-To remove integrations and local state:
+## Licença
 
-```bash
-/Applications/AgentGlance.app/Contents/Resources/bin/agentglance uninstall
-```
-
-Then quit AgentGlance and delete the app bundle. Review your Claude or Codex configuration if you manually modified AgentGlance entries after installation.
-
-## Terminal focus
-
-| Host | Focus strategy | Notes |
-| --- | --- | --- |
-| Ghostty | exact surface ID, foreground PID, or TTY; unique project/title fallback | Requires Ghostty 1.3+ |
-| iTerm2 | exact normalized session ID, then TTY | Selects the split, tab, and window |
-| Terminal | exact TTY | Selects the tab and raises its containing window |
-| tmux | validated pane ID, then host activation | `tmux` must be in a trusted standard install location |
-
-macOS asks for Automation access the first time AgentGlance controls a terminal. If denied, enable it under **System Settings → Privacy & Security → Automation**.
-
-## How it works
-
-Claude hooks, an OpenCode plugin, a Pi extension, the Codex rollout watcher, the Convoy runs watcher, and a process fallback produce versioned session documents under `~/.agentglance/state`. The app observes that directory and renders active sessions. State is written atomically with user-only permissions. Convoy needs no hook at all: its run metadata under `~/.convoy/runs` is read directly, and a run is only shown while its recorded server process is verifiably alive. OpenCode phase IDs named by Convoy are retained in a private ownership index and filtered at repository load time, so internal phases stay hidden even after a plugin rewrite or app restart.
-
-Everything is event-driven and off the main thread: a libproc-based scanner (no subprocesses, ~2 ms per full sweep) runs on a 5-second heartbeat, kernel `EVFILT_PROC` exit watchers reap closed sessions instantly, and directory observation with debounce delivers state changes to the UI. A native session that has been quiet for a full scan interval is also checked against the detected agent set; removal requires two consecutive misses, so one transient metadata-read failure cannot hide a live session. Terminal identity disambiguates agents sharing a project directory. Claude and OpenCode status changes land in well under a second; Codex and Convoy ride the heartbeat. Session titles follow the live Ghostty tab title — cleaned of status decorations and capped at 20 characters — and a manual rename (persisted in `~/.agentglance/session-names.json`) always wins. Agent matching accepts either the kernel-resolved executable path or `argv[0]`, so versioned symlink installs like `~/.local/bin/claude → …/versions/x.y.z` are detected correctly.
-
-See [Architecture](docs/ARCHITECTURE.md) for the full data flow and trust boundaries.
-
-## Privacy and security
-
-AgentGlance has no networking or telemetry. It stores local session metadata—including project paths, process IDs, timestamps, and terminal identifiers—but not prompts or model responses. Read [PRIVACY.md](PRIVACY.md) before installing integrations and [SECURITY.md](SECURITY.md) before reporting a vulnerability.
-
-Treat `agentglance debug` output as private because it includes session and project metadata:
-
-```bash
-/Applications/AgentGlance.app/Contents/Resources/bin/agentglance debug
-```
-
-## Known limitations
-
-- Codex rollout formats are not a stable public contract; unknown lines are ignored and the notify hook is the reliable turn-complete signal.
-- Same-directory Codex sessions can be ambiguous when upstream events provide no PID or terminal identifier.
-- The app currently has no signed/notarized binary release, automatic updater, or Homebrew cask.
-- The behavioral runner is an executable because the minimal Command Line Tools environment used during early development did not ship XCTest or Swift Testing. Run it with `swift run agentglance-tests`.
-
-## Contributing
-
-Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). New runtime behavior requires a failing behavioral test first. All pull requests must pass:
-
-```bash
-swift build
-swift run agentglance-tests
-./scripts/build-app.sh
-```
-
-## Trademark notice
-
-AgentGlance is independent and is not affiliated with Anthropic, OpenAI, SST, Ghostty, Apple, or tmux. Product names and marks identify compatible tools only. See [NOTICE](NOTICE).
-
-## License
-
-[MIT](LICENSE) © 2026 Josemi Hernandez
+MIT, como o original. O aviso de copyright do AgentGlance está em `LICENSE` e
+mantém-se — o motor é dele.
