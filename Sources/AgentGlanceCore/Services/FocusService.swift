@@ -40,34 +40,71 @@ public enum FocusPlanner {
         return actions
     }
 
-    /// A aplicação dona do terminal, descoberta pelo tty ou pelo próprio
-    /// processo do agente.
-    /// O cmux é scriptável e expõe `working directory` por painel de terminal,
-    /// mais um comando `focus` que traz a janela à frente. Dá para acertar no
-    /// separador certo em vez de só na aplicação — e as sessões desta máquina
-    /// vivem lá dentro.
+    /// Acertar no painel exato do cmux, e não só na aplicação.
     ///
-    /// Vem antes do recurso genérico e depois dos terminais que o AgentGlance
-    /// já sabia tratar: quem tem alvo preciso continua a usá-lo.
+    /// O cmux embute o Ghostty e anuncia-se `TERM_PROGRAM=ghostty`. Enquanto
+    /// isto não existiu, o planeador escolhia o ramo do Ghostty, falava com a
+    /// aplicação Ghostty — que não tem janela nenhuma — e caía no recurso
+    /// genérico: trazia o cmux à frente e deixava-te no separador onde já
+    /// estavas. Clicar numa sessão não te levava a lado nenhum.
+    ///
+    /// `CMUX_SURFACE_ID` é o `id` do terminal no dicionário de scripting, e
+    /// `focus` sobre ele seleciona o separador E o split. Isto importa: dois
+    /// splits do mesmo repositório têm a mesma `working directory`, e era por
+    /// ela que a versão anterior procurava — acertava no separador certo por
+    /// sorte e no split errado por sistema.
     static func cmuxAction(for session: AgentSession) -> FocusAction? {
+        if let surface = session.terminal.cmuxSurfaceID, !surface.isEmpty {
+            return .appleScript(cmuxScript(
+                surfaceID: surface,
+                tabID: session.terminal.cmuxTabID
+            ))
+        }
+        // Sessões registadas antes de os ids existirem só têm a diretoria.
+        // Vale mais acertar no separador certo do que em nenhum.
         guard !session.cwd.isEmpty else { return nil }
         let cwd = appleScriptString(session.cwd)
         return .appleScript("""
         tell application "cmux"
-          repeat with w in windows
-            repeat with t in tabs of w
-              try
-                set term to focused terminal of t
-                if (working directory of term) is \(cwd) then
-                  focus term
-                  return "ok"
-                end if
-              end try
-            end repeat
-          end repeat
-          error "AgentGlance could not find a cmux terminal for this directory"
+          set matches to every terminal whose working directory is "\(cwd)"
+          if (count of matches) is 0 then error "AgentGlance could not find a cmux terminal for this directory"
+          focus (item 1 of matches)
+          activate
         end tell
         """)
+    }
+
+    /// Pelo painel; se ele já não existir, pelo separador que o continha.
+    ///
+    /// Um split fechado não é razão para não ir a lado nenhum: o separador
+    /// ainda é o sítio certo, e `focus` do seu terminal em foco leva-te lá.
+    private static func cmuxScript(surfaceID: String, tabID: String?) -> String {
+        let surface = appleScriptString(surfaceID)
+        let tabBranch = tabID.map { id in
+            """
+
+              repeat with w in windows
+                repeat with t in tabs of w
+                  if (id of t) is "\(appleScriptString(id))" then
+                    focus (focused terminal of t)
+                    activate
+                    return
+                  end if
+                end repeat
+              end repeat
+            """
+        } ?? ""
+        return """
+        tell application "cmux"
+          set matches to every terminal whose id is "\(surface)"
+          if (count of matches) is 1 then
+            focus (item 1 of matches)
+            activate
+            return
+          end if\(tabBranch)
+          error "AgentGlance could not find this cmux terminal"
+        end tell
+        """
     }
 
     static func fallbackAction(for session: AgentSession) -> FocusAction? {
@@ -82,6 +119,12 @@ public enum FocusPlanner {
     }
 
     private static func terminalAction(for session: AgentSession) throws -> FocusAction {
+        // Antes do Ghostty, de propósito: uma sessão do cmux diz-se Ghostty, e
+        // testar o Ghostty primeiro mandava-a sempre pelo caminho errado.
+        if session.terminal.cmuxSurfaceID?.isEmpty == false,
+           let action = cmuxAction(for: session) {
+            return action
+        }
         if session.terminal.termProgram?.lowercased() == "ghostty" {
             return .appleScript(ghosttyScript(for: session))
         }

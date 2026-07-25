@@ -39,6 +39,8 @@ function createState(id, cwd) {
     terminal: {
       term_program: process.env.TERM_PROGRAM || null,
       iterm_session_id: process.env.ITERM_SESSION_ID || null,
+      cmux_surface_id: process.env.CMUX_SURFACE_ID || process.env.CMUX_PANEL_ID || null,
+      cmux_tab_id: process.env.CMUX_TAB_ID || process.env.CMUX_WORKSPACE_ID || null,
       tmux_pane: process.env.TMUX_PANE || null,
       tty: null,
       window_title_hint: `${basename(cwd)} — pi`,

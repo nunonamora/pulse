@@ -50,6 +50,15 @@ public struct TerminalContext: Codable, Equatable, Sendable {
     public let termProgram: String?
     public let ghosttyTerminalID: String?
     public let itermSessionID: String?
+    /// Identidade exata do painel de terminal no cmux (`CMUX_SURFACE_ID`).
+    ///
+    /// O cmux embute o Ghostty e anuncia-se `TERM_PROGRAM=ghostty`, por isso
+    /// não há como o distinguir pelo programa. Estes dois campos são o sinal:
+    /// quem os tem está dentro do cmux, aconteça o que acontecer ao resto.
+    public let cmuxSurfaceID: String?
+    /// O separador que contém esse painel (`CMUX_TAB_ID`). Serve de recuo
+    /// quando o split foi fechado mas o separador ainda existe.
+    public let cmuxTabID: String?
     public let tmuxPane: String?
     public let tty: String?
     public let windowTitleHint: String?
@@ -58,6 +67,8 @@ public struct TerminalContext: Codable, Equatable, Sendable {
         termProgram: String? = nil,
         ghosttyTerminalID: String? = nil,
         itermSessionID: String? = nil,
+        cmuxSurfaceID: String? = nil,
+        cmuxTabID: String? = nil,
         tmuxPane: String? = nil,
         tty: String? = nil,
         windowTitleHint: String? = nil
@@ -65,15 +76,39 @@ public struct TerminalContext: Codable, Equatable, Sendable {
         self.termProgram = termProgram
         self.ghosttyTerminalID = ghosttyTerminalID
         self.itermSessionID = itermSessionID
+        self.cmuxSurfaceID = cmuxSurfaceID
+        self.cmuxTabID = cmuxTabID
         self.tmuxPane = tmuxPane
         self.tty = tty
         self.windowTitleHint = windowTitleHint
+    }
+
+    /// Este contexto, com o que ele não souber preenchido pelo anterior.
+    ///
+    /// O ambiente de um hook não é sempre o mesmo — um `Stop` pode chegar de um
+    /// processo que já perdeu variáveis que o `UserPromptSubmit` tinha. Sem
+    /// isto, uma captura mais pobre apagava identidade boa; com isto, cada hook
+    /// só pode acrescentar.
+    public func completing(_ earlier: TerminalContext?) -> TerminalContext {
+        guard let earlier else { return self }
+        return TerminalContext(
+            termProgram: termProgram ?? earlier.termProgram,
+            ghosttyTerminalID: ghosttyTerminalID ?? earlier.ghosttyTerminalID,
+            itermSessionID: itermSessionID ?? earlier.itermSessionID,
+            cmuxSurfaceID: cmuxSurfaceID ?? earlier.cmuxSurfaceID,
+            cmuxTabID: cmuxTabID ?? earlier.cmuxTabID,
+            tmuxPane: tmuxPane ?? earlier.tmuxPane,
+            tty: tty ?? earlier.tty,
+            windowTitleHint: windowTitleHint ?? earlier.windowTitleHint
+        )
     }
 
     enum CodingKeys: String, CodingKey {
         case termProgram = "term_program"
         case ghosttyTerminalID = "ghostty_terminal_id"
         case itermSessionID = "iterm_session_id"
+        case cmuxSurfaceID = "cmux_surface_id"
+        case cmuxTabID = "cmux_tab_id"
         case tmuxPane = "tmux_pane"
         case tty
         case windowTitleHint = "window_title_hint"

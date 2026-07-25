@@ -54,7 +54,13 @@ public struct ClaudeHookProcessor: Sendable {
             cwd: input.cwd,
             startedAt: existing?.startedAt ?? now,
             updatedAt: now,
-            terminal: existing?.terminal ?? terminalContext(for: input.cwd, environment: environment)
+            // Completa o que já se sabia em vez de o descartar ou de o manter
+            // congelado. Era `existing?.terminal ?? …`: uma sessão registada
+            // uma vez nunca mais reavaliava o terminal, e todo o campo que o
+            // AgentGlance aprendesse a capturar depois disso só chegava a
+            // sessões novas. Foi o que aconteceu aos ids do cmux.
+            terminal: terminalContext(for: input.cwd, environment: environment)
+                .completing(existing?.terminal)
         )
         try repository.save(session)
     }
@@ -99,6 +105,9 @@ public struct ClaudeHookProcessor: Sendable {
         TerminalContext(
             termProgram: environment["TERM_PROGRAM"],
             itermSessionID: environment["ITERM_SESSION_ID"],
+            // O cmux publica os dois com nomes duplicados; qualquer um serve.
+            cmuxSurfaceID: environment["CMUX_SURFACE_ID"] ?? environment["CMUX_PANEL_ID"],
+            cmuxTabID: environment["CMUX_TAB_ID"] ?? environment["CMUX_WORKSPACE_ID"],
             tmuxPane: environment["TMUX_PANE"],
             tty: environment["AGENTGLANCE_TTY"],
             windowTitleHint: "\(URL(fileURLWithPath: cwd).lastPathComponent) — claude"
