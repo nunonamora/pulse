@@ -79,13 +79,16 @@ struct NotchWidgetView: View {
         let showsIdleMark = summary.activeSessionCount == 0
         // Quem anda na barra é quem está mesmo a trabalhar. Sem trabalho, não
         // há mascote — a barra em repouso volta a ser só a barra.
+        //
+        // Não entra no cálculo das larguras: ele anda em sobreposição sobre a
+        // silhueta que já existe, e alargar a ala por causa dele descentrava-a
+        // em relação ao recorte.
         let walker: AgentTool? = store.sessions
             .first { $0.status == .working }?.tool
         let naturalLeftWidth = layout.statusWingWidth(
             side: .left,
             visibleIndicatorCount: leftEntries.count,
-            showsIdleMark: showsIdleMark,
-            showsMascot: walker != nil
+            showsIdleMark: showsIdleMark
         )
         let naturalRightWidth = layout.statusWingWidth(
             side: .right,
@@ -427,11 +430,23 @@ struct NotchWidgetView: View {
         // dois lados, e fica atrás das contagens, que vivem nas pontas.
         .overlay {
             if let walker {
-                WalkingMascot(
-                    tool: walker,
-                    runway: layout.notchWidth + NotchLayout.mascotLaneWidth * 2
-                )
-                .allowsHitTesting(false)
+                // Duas correções ao primeiro tento:
+                //
+                // 1. O trajeto era fixo em notch + 2 faixas, e podia ser mais
+                //    largo do que a silhueta preta — o mascote saía do preto e
+                //    ia andar por cima da menu bar. Agora o passeio de cada
+                //    lado nunca passa a ala mais estreita.
+                // 2. Estava centrado na BARRA e não no NOTCH. Como as alas têm
+                //    larguras diferentes, o centro da barra não é o centro do
+                //    recorte: ele passava ao lado da câmara em vez de por trás
+                //    dela, e saía torto dos dois lados.
+                let margin = min(leftWidth, rightWidth, NotchLayout.mascotLaneWidth)
+                let barWidth = leftWidth + layout.notchWidth + rightWidth
+                let notchCentre = leftWidth + layout.notchWidth / 2
+
+                WalkingMascot(tool: walker, runway: layout.notchWidth + margin * 2)
+                    .offset(x: notchCentre - barWidth / 2)
+                    .allowsHitTesting(false)
             }
         }
     }

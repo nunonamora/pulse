@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var store: StateStore?
     private var observationScheduler: ObservationScheduler?
     private var focusAcknowledgmentObserver: FocusAcknowledgmentObserver?
+    private var screenshotSignal: DispatchSourceSignal?
     private var instanceLock: SingleInstanceLock?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -111,7 +112,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // atrasada com o sintetizador frio, e desencontrava-se do som de
             // assinatura que a antecede.
             Voice.shared.prewarm()
+            self.installScreenshotSignal()
         }
+    }
+
+    /// `kill -USR1 $(pgrep -x AgentGlance)` fotografa a faixa de topo do ecrã
+    /// para /tmp/agentglance-shot.png.
+    ///
+    /// Tem de ser a app a disparar: a autorização de Gravação de Ecrã é dada ao
+    /// pacote, e o binário do CLI vive fora dele — teria identidade diferente e
+    /// seria recusado.
+    private func installScreenshotSignal() {
+        let source = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
+        source.setEventHandler {
+            Task { @MainActor in
+                let result = await ScreenShot.captureTop()
+                NSLog("AgentGlance screenshot: %@", result)
+                // Também em ficheiro: o NSLog de uma app de fundo é difícil de
+                // apanhar, e sem saber o resultado ficava-se sem diagnóstico.
+                try? result.write(
+                    toFile: "/tmp/agentglance-shot.status",
+                    atomically: true, encoding: .utf8
+                )
+            }
+        }
+        source.resume()
+        signal(SIGUSR1, SIG_IGN)
+        screenshotSignal = source
     }
 
     func applicationWillTerminate(_ notification: Notification) {
