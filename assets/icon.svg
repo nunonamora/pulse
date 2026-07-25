@@ -2,62 +2,62 @@
 <!--
   Atalaia — a marca.
 
-  Um vigia a espreitar de dentro do recorte. A app vigia agentes e chama por
-  ti; a marca é a criatura que faz isso, não o gesto abstrato do som.
+  O recorte no topo, e o olhar que desce dele. A app vive pendurada na berma
+  de cima do ecrã e vigia o que se passa por baixo; a marca é esse gesto, não
+  um objeto.
 
-  Desenhado para 16 px, não para 512: a cabeça ocupa mais de metade do quadro e
-  os olhos são o elemento de maior contraste de todo o ícone. Duas luzes claras
-  sobre escuro é a única coisa que se lê sem falhas na menu bar — e é também o
-  que dá presença: um ícone que olha de volta.
+  Preto e branco, quatro formas. A cor foi-se toda: a versão anterior era uma
+  criatura em coral sobre grafite, e coral é a marca de uma das ferramentas que
+  esta app vigia, não da app.
+
+  Desenhado de fora para dentro. A 16 px sobra o recorte branco encostado ao
+  topo e uma cunha por baixo — que é exatamente a ideia. Tudo o que precisasse
+  de mais pixels do que isso foi cortado antes de existir.
+
+  A seteira é o que separa isto de um candeeiro: sem ela o recorte era uma
+  mancha a iluminar, com ela é uma abertura a olhar. Some-se a 16 px, e some-se
+  bem — fica a forma, que é o que a esse tamanho se lê.
 
   Versões anteriores, e porque morreram: três arcos concêntricos (o terceiro
-  desaparecia a 16 px); dois arcos com um ponto de luz (lia-se como cara triste,
-  o ponto virava nariz).
+  desaparecia a 16 px); dois arcos com um ponto de luz (lia-se como cara
+  triste); uma criatura em coral (dizia "Claude", não "Atalaia"); uma torre com
+  merlões e seteira (lia-se como torre de xadrez, e o topo empastava a 16 px).
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024"
      role="img" aria-label="Atalaia">
   <defs>
-    <linearGradient id="corpo" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#26262B"/>
-      <stop offset="1" stop-color="#0A0A0C"/>
+    <linearGradient id="fundo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1E1E22"/>
+      <stop offset="1" stop-color="#050506"/>
     </linearGradient>
-    <linearGradient id="cabeca" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFD07A"/>
-      <stop offset="1" stop-color="#D97757"/>
+    <!-- O olhar perde força com a distância, como qualquer olhar. -->
+    <linearGradient id="olhar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#FFFFFF" stop-opacity="0.90"/>
+      <stop offset="0.30" stop-color="#FFFFFF" stop-opacity="0.30"/>
+      <stop offset="0.62" stop-color="#FFFFFF" stop-opacity="0.04"/>
+      <stop offset="1"    stop-color="#FFFFFF" stop-opacity="0"/>
     </linearGradient>
-    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#FFC46B" stop-opacity="0.22"/>
-      <stop offset="1" stop-color="#FFC46B" stop-opacity="0"/>
-    </radialGradient>
     <clipPath id="moldura">
       <rect x="96" y="96" width="832" height="832" rx="196" ry="196"/>
     </clipPath>
   </defs>
 
-  <rect x="96" y="96" width="832" height="832" rx="196" ry="196" fill="url(#corpo)"/>
+  <rect x="96" y="96" width="832" height="832" rx="196" ry="196" fill="url(#fundo)"/>
 
   <g clip-path="url(#moldura)">
-    <circle cx="512" cy="600" r="330" fill="url(#halo)"/>
+    <!-- O olhar: uma cunha que abre para baixo, a partir do recorte. Sai da
+         moldura em baixo de propósito — um cone que acabasse dentro do quadro
+         fechava a ideia, e a atalaia olha para lá do que se vê. -->
+    <path d="M428 268 L596 268 L742 1000 L282 1000 Z" fill="url(#olhar)"/>
 
-    <!-- O recorte, rente ao topo: é o sítio de onde ele espreita. -->
-    <path d="M 372 80 L 652 80 L 652 268 Q 652 322 598 322 L 426 322 Q 372 322 372 268 Z"
-          fill="#000000"/>
+    <!-- O recorte, encostado ao topo: topo reto, cantos de baixo redondos.
+         É a única forma sólida do ícone, e é a que sobrevive a 16 px. -->
+    <path d="M392 80 L632 80 L632 210 Q632 272 570 272 L454 272 Q392 272 392 210 Z"
+          fill="#FAFAFA"/>
 
-    <!-- As antenas, atrás da cabeça. -->
-    <g stroke="#8A6A52" stroke-width="26" stroke-linecap="round">
-      <path d="M 398 470 L 356 372"/>
-      <path d="M 626 470 L 668 372"/>
-    </g>
-    <circle cx="352" cy="356" r="30" fill="#FFD07A"/>
-    <circle cx="672" cy="356" r="30" fill="#FFD07A"/>
-
-    <!-- A cabeça. Ocupa o quadro para sobreviver à escala. -->
-    <rect x="290" y="424" width="444" height="392" rx="150" ry="150" fill="url(#cabeca)"/>
-
-    <!-- Os olhos: o maior contraste do ícone, e o que se lê a 16 px. -->
-    <ellipse cx="418" cy="606" rx="52" ry="62" fill="#131316"/>
-    <ellipse cx="606" cy="606" rx="52" ry="62" fill="#131316"/>
-    <circle cx="434" cy="586" r="17" fill="#FFF2D4"/>
-    <circle cx="622" cy="586" r="17" fill="#FFF2D4"/>
+    <!-- A seteira. Uma fenda escura basta para o recorte deixar de ser uma
+         mancha e passar a ser algo que olha. A 16 px preenche e volta a ser
+         mancha, que é o comportamento certo: some-se o detalhe, fica a forma. -->
+    <rect x="440" y="170" width="144" height="34" rx="17" fill="#0A0A0C"/>
   </g>
 </svg>

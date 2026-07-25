@@ -3,7 +3,7 @@
 ## Verification
 
 - [ ] `swift build`
-- [ ] `swift run agentglance-tests`
+- [ ] `swift run atalaia-tests`
 - [ ] `./scripts/build-app.sh`
 
 ## Security and privacy

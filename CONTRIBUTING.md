@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve AgentGlance.
+Thanks for helping improve Atalaia.
 
 ## Development setup
 
@@ -12,12 +12,12 @@ Requirements:
 - Ghostty 1.3+, iTerm2, or Terminal for manual focus testing.
 
 ```bash
-git clone https://github.com/ixjosemi/AgentGlance.git
-cd AgentGlance
+git clone https://github.com/ixjosemi/Atalaia.git
+cd Atalaia
 swift build
-swift run agentglance-tests
+swift run atalaia-tests
 ./scripts/build-app.sh
-open .build/AgentGlance.app
+open .build/Atalaia.app
 ```
 
 ## Workflow

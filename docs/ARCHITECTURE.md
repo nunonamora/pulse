@@ -1,16 +1,16 @@
 # Architecture
 
-AgentGlance is a local, layered macOS application.
+Atalaia is a local, layered macOS application.
 
 ## Components
 
-- `AgentGlanceApp` owns the SwiftUI lifecycle, notch panel, settings, and Codex observation timer.
-- `AgentGlance` is the command-line entry point used by installation, hooks, notifications, and diagnostics.
-- `AgentGlanceCore` contains domain models, persistence, integration parsers, process discovery, focus planning, and installation.
+- `AtalaiaApp` owns the SwiftUI lifecycle, notch panel, settings, and Codex observation timer.
+- `Atalaia` is the command-line entry point used by installation, hooks, notifications, and diagnostics.
+- `AtalaiaCore` contains domain models, persistence, integration parsers, process discovery, focus planning, and installation.
 
 ## Data flow
 
-Claude hooks, the OpenCode and Pi integrations, the Codex watcher, the Convoy runs watcher, and the process reaper normalize lifecycle information into versioned `AgentSession` documents. `StateRepository` atomically publishes those documents under `~/.agentglance/state`. Convoy phase ownership is applied as a repository projection so its internal OpenCode documents never become global rows, even if their producer rewrites them. `StateStore` observes the directory and exposes active sessions to the notch UI. Selecting a session reloads its latest process and terminal enrichment before creating a constrained focus action for tmux or a supported terminal.
+Claude hooks, the OpenCode and Pi integrations, the Codex watcher, the Convoy runs watcher, and the process reaper normalize lifecycle information into versioned `AgentSession` documents. `StateRepository` atomically publishes those documents under `~/.atalaia/state`. Convoy phase ownership is applied as a repository projection so its internal OpenCode documents never become global rows, even if their producer rewrites them. `StateStore` observes the directory and exposes active sessions to the notch UI. Selecting a session reloads its latest process and terminal enrichment before creating a constrained focus action for tmux or a supported terminal.
 
 ## Presentation
 
@@ -34,7 +34,7 @@ The reaper removes dead sessions and creates fallback state for detectable proce
 
 ## State schema
 
-Schema version 1 records tool, session ID, PID, lifecycle status, project path, timestamps, terminal context, and optional source. AgentGlance may add an optional `process_identity` containing that PID and its kernel start time in microseconds; older integration documents remain valid and are enriched during reconciliation. Unsupported schema versions fail closed.
+Schema version 1 records tool, session ID, PID, lifecycle status, project path, timestamps, terminal context, and optional source. Atalaia may add an optional `process_identity` containing that PID and its kernel start time in microseconds; older integration documents remain valid and are enriched during reconciliation. Unsupported schema versions fail closed.
 
 Integration-owned lifecycle documents remain the authority for status, attention reason, step, and activity timestamps. Reconciliation never replaces those documents to add process or Ghostty metadata. App-owned enrichment is stored separately as `enrichment-<tool>-<base64url-session-id>.overlay`, using internal overlay schema version 1. The bounded overlay contains only its lifecycle binding (PID, optional identity, and start time), one verified target process identity, and optional terminal metadata. Overlay files are atomically replaced with mode `0600`; reads require a private owner-controlled regular file and reject links, oversized data, unknown schemas, changed lifecycle bindings, and recycled process generations. Invalid and orphaned overlays are ignored and pruned, and removing a lifecycle session removes its overlay. Loads merge a valid overlay in memory, leaving concurrent integration lifecycle writes untouched.
 

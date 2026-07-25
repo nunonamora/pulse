@@ -94,9 +94,9 @@ O `PermissionBroker` acrescenta esse canal seguindo o precedente do
 pertence à integração:
 
 ```
-o hook escreve   ~/.agentglance/state/decisions/<id>.request.json
+o hook escreve   ~/.atalaia/state/decisions/<id>.request.json
                  e bloqueia, a sondar
-a app responde   ~/.agentglance/state/decisions/<id>.reply.json
+a app responde   ~/.atalaia/state/decisions/<id>.reply.json
 o hook imprime   {"hookSpecificOutput":{…,"decision":{"behavior":"allow"}}}
 ```
 

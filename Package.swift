@@ -4,25 +4,25 @@
 import PackageDescription
 
 let package = Package(
-    name: "AgentGlance",
+    name: "Atalaia",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "agentglance", targets: ["AgentGlance"]),
-        .executable(name: "AgentGlanceApp", targets: ["AgentGlanceApp"]),
-        .executable(name: "agentglance-tests", targets: ["AgentGlanceTests"]),
+        .executable(name: "atalaia", targets: ["Atalaia"]),
+        .executable(name: "AtalaiaApp", targets: ["AtalaiaApp"]),
+        .executable(name: "atalaia-tests", targets: ["AtalaiaTests"]),
     ],
     targets: [
         .target(
-            name: "AgentGlanceCore",
+            name: "AtalaiaCore",
             resources: [.copy("Resources")]
         ),
         .executableTarget(
-            name: "AgentGlance",
-            dependencies: ["AgentGlanceCore"]
+            name: "Atalaia",
+            dependencies: ["AtalaiaCore"]
         ),
         .executableTarget(
-            name: "AgentGlanceApp",
-            dependencies: ["AgentGlanceCore"],
+            name: "AtalaiaApp",
+            dependencies: ["AtalaiaCore"],
             // swift build does not compile Metal sources, so the shader ships
             // as a prebuilt default.metallib; regenerate it from Ripple.metal
             // with scripts/compile-shaders.sh after editing the source.
@@ -30,9 +30,9 @@ let package = Package(
             resources: [.copy("Resources/default.metallib")]
         ),
         .executableTarget(
-            name: "AgentGlanceTests",
-            dependencies: ["AgentGlanceCore"],
-            path: "Tests/AgentGlanceCoreTests"
+            name: "AtalaiaTests",
+            dependencies: ["AtalaiaCore"],
+            path: "Tests/AtalaiaCoreTests"
         ),
     ],
     swiftLanguageModes: [.v5]
