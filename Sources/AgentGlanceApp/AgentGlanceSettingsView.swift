@@ -12,6 +12,7 @@ struct AgentGlanceSettingsView: View {
     @AppStorage("voiceOnAttention") private var voiceOnAttention = true
     @AppStorage("voiceOnTurnComplete") private var voiceOnTurnComplete = true
     @AppStorage("voiceSilentOnCall") private var voiceSilentOnCall = true
+    @AppStorage("voiceUseSystem") private var voiceUseSystem = false
     @AppStorage("screenSelectionMode") private var screenSelectionMode = ScreenSelectionMode.pointer.rawValue
     @AppStorage("glassFrostRadiusNotch") private var notchFrostRadius = NotchGlassStyle.defaultFrostRadius
     @AppStorage("glassTintOpacityNotch") private var notchTintOpacity = NotchGlassStyle.defaultTintOpacity
@@ -23,6 +24,14 @@ struct AgentGlanceSettingsView: View {
     /// O que a voz faz e, sobretudo, o que ela NÃO faz — é a parte que decide
     /// se isto se aguenta um dia inteiro.
     private var voiceFooter: String {
+        if voiceUseSystem {
+            return "Speaks through the system voice set in System Settings → "
+                + "Accessibility → Spoken Content. Siri voices live there and are not "
+                + "available to apps any other way. One voice for every tool, so the "
+                + "signature chime and a per-tool speaking rate carry the identity "
+                + "instead of the timbre.\n\nTurn this off to get five distinct "
+                + "installed voices instead."
+        }
         var text = "Each tool gets its own signature chime and voice pitch. "
             + "Voice replaces the sound for that event rather than adding to it. "
             + "It stays quiet during Do Not Disturb and Focus, and while you are looking "
@@ -65,6 +74,7 @@ struct AgentGlanceSettingsView: View {
             Section {
                 Toggle("Speak session events out loud", isOn: $voiceEnabled)
                 if voiceEnabled {
+                    Toggle("Use the system voice (Siri, if selected)", isOn: $voiceUseSystem)
                     Toggle("Speak when a session needs you", isOn: $voiceOnAttention)
                     Toggle("Speak when a session finishes its turn", isOn: $voiceOnTurnComplete)
                     Toggle("Stay quiet while the microphone is in use", isOn: $voiceSilentOnCall)

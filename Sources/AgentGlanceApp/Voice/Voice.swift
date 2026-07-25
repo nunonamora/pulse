@@ -39,6 +39,23 @@ final class Voice {
         set { UserDefaults.standard.set(newValue, forKey: "voiceEnabled") }
     }
 
+    /// Usar a voz do sistema — que pode ser a da Siri.
+    ///
+    /// As vozes Siri não são expostas ao `AVSpeechSynthesizer`: não aparecem em
+    /// `speechVoices()` nem se instanciam por identificador. Mas o comando
+    /// `say`, invocado SEM `-v`, usa a voz do sistema — e se ela for a Siri, é
+    /// a Siri que fala. Verificado por comparação de áudio: a saída por omissão
+    /// não coincide com nenhuma das vozes listadas.
+    ///
+    /// O que se perde: o timbre deixa de distinguir as ferramentas, porque a
+    /// voz do sistema é uma só. Fica o som de assinatura a fazê-lo, mais uma
+    /// variação de ritmo por ferramenta. Quem prefere cinco timbres distintos
+    /// desliga isto e volta às vozes instaladas.
+    var useSystemVoice: Bool {
+        get { UserDefaults.standard.object(forKey: "voiceUseSystem") as? Bool ?? false }
+        set { UserDefaults.standard.set(newValue, forKey: "voiceUseSystem") }
+    }
+
     var silentOnCall: Bool {
         get { UserDefaults.standard.object(forKey: "voiceSilentOnCall") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "voiceSilentOnCall") }
@@ -172,12 +189,62 @@ final class Voice {
     func stop() {
         queue.removeAll()
         synthesizer.stopSpeaking(at: .immediate)
+        sayProcess?.terminate()
+        sayProcess = nil
         speaking = false
     }
+
+    /// Fala pelo `say`, que usa a voz do sistema.
+    ///
+    /// Sem `-v` de propósito: nomear a voz faria o `say` procurá-la na lista
+    /// pública, onde a Siri não está, e cair silenciosamente noutra. O ritmo é
+    /// o único eixo que resta para separar as ferramentas ao ouvido, já que o
+    /// timbre passa a ser um só.
+    private func speakWithSystemVoice(_ text: String, tool: AgentTool) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/say")
+        process.arguments = ["-r", String(rate(for: tool)), text]
+        process.terminationHandler = { _ in
+            Task { @MainActor [weak self] in
+                self?.speaking = false
+                self?.sayProcess = nil
+                self?.drain()
+            }
+        }
+        speaking = true
+        sayProcess = process
+        do {
+            // Pequeno atraso para o earcon não ser pisado pela primeira sílaba.
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 260_000_000)
+                try? process.run()
+            }
+        }
+    }
+
+    /// Palavras por minuto. A omissão do macOS anda nos 175; estes valores
+    /// ficam à volta disso, o suficiente para se notar sem soar apressado.
+    private func rate(for tool: AgentTool) -> Int {
+        switch tool {
+        case .claude:   return 175
+        case .codex:    return 190
+        case .opencode: return 170
+        case .pi:       return 196
+        case .convoy:   return 164
+        }
+    }
+
+    private var sayProcess: Process?
 
     private func drain() {
         guard !speaking, !queue.isEmpty else { return }
         let (tool, text) = queue.removeFirst()
+
+        if useSystemVoice {
+            speakWithSystemVoice(text, tool: tool)
+            return
+        }
+
         let profile = VoiceCatalog.shared.profile(for: tool)
 
         let utterance = AVSpeechUtterance(string: text)
