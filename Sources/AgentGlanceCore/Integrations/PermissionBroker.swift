@@ -156,6 +156,18 @@ public struct PermissionBroker: Sendable {
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path)
         else { return [] }
 
+        // Uma resposta sem pedido é lixo: o hook limpa os dois ao sair, mas se
+        // ele morreu antes — morto à força, ou cortado pelo timeout do Claude
+        // Code — a resposta que escrevemos fica cá para sempre. Ninguém a
+        // apagava, e acumulavam-se.
+        let requestIDs = Set(names.filter { $0.hasSuffix(".request.json") }
+            .map { $0.replacingOccurrences(of: ".request.json", with: "") })
+        for name in names where name.hasSuffix(".reply.json") {
+            let id = name.replacingOccurrences(of: ".reply.json", with: "")
+            guard !requestIDs.contains(id) else { continue }
+            try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+        }
+
         var requests: [PermissionRequest] = []
         for name in names where name.hasSuffix(".request.json") {
             let url = directory.appendingPathComponent(name)
