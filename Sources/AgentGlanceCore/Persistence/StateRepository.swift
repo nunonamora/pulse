@@ -128,6 +128,13 @@ public struct StateRepository: Sendable {
     }
 
     public func prepareDirectory() throws {
+        // O broker escreve num subdiretório daqui; criá-lo já evita que o
+        // primeiro pedido tenha de o fazer com o agente à espera.
+        try? FileManager.default.createDirectory(
+            at: directoryURL.appendingPathComponent(PermissionBroker.directoryName, isDirectory: true),
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
         try ensurePrivateDirectory()
     }
 

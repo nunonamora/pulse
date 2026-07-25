@@ -32,6 +32,12 @@ public final class StateStore {
     public private(set) var sessions: [AgentSession] = []
     public private(set) var lastErrorDescription: String?
     public private(set) var acknowledgments = AttentionAcknowledgments()
+    /// Pedidos de permissão à espera de resposta tua.
+    ///
+    /// Do outro lado de cada um está um processo de hook bloqueado, e com ele
+    /// o agente. Por isso isto é lido no mesmo ciclo que as sessões: chegam
+    /// pela mesma notificação e pelo mesmo observador de diretório.
+    public private(set) var pendingDecisions: [PermissionRequest] = []
     public private(set) var nameOverrides = SessionNameOverrides()
 
     /// Invoked from `reload()` with the sessions that just transitioned into
@@ -73,11 +79,27 @@ public final class StateStore {
     /// rather than the value captured when SwiftUI rendered a row.
     public var stateDirectoryURL: URL { repository.directoryURL }
 
+    public var pendingDecision: PermissionRequest? { pendingDecisions.first }
+    public var hasPendingDecision: Bool { !pendingDecisions.isEmpty }
+
+    private var broker: PermissionBroker { PermissionBroker(stateDirectory: repository.directoryURL) }
+
+    /// Responde ao pedido. O hook está a sondar e apanha isto em menos de um
+    /// décimo de segundo.
+    public func decide(_ request: PermissionRequest, _ decision: PermissionDecision) {
+        try? broker.reply(to: request.id, decision: decision)
+        pendingDecisions.removeAll { $0.id == request.id }
+    }
+
     /// Reloading is strictly a read: ended sessions are filtered from the UI
     /// but their files stay on disk for the reaper to delete on its own
     /// queue. A reload that writes would re-trigger this store's directory
     /// observation and feed back into itself.
     public func reload() throws {
+        // Os pedidos chegam pelo mesmo ciclo que as sessões: o hook faz post na
+        // notificação Darwin depois de escrever, e o observador de diretório
+        // apanha o ficheiro. Não é preciso um segundo mecanismo.
+        pendingDecisions = broker.pendingRequests()
         sessions = try repository.loadSessions()
             .filter { $0.status != .ended }
             .sorted(by: Self.precedes)

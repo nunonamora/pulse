@@ -61,6 +61,8 @@ struct NotchWidgetView: View {
     @State private var isHoveringPanel = false
     @State private var openMenuTrackingCount = 0
     @State private var rowInteractionActive = false
+    /// Relógio do prazo do cartão de decisão; só corre enquanto ele existe.
+    @State private var decisionClock = Date()
     @State private var outsideClickMonitor: Any?
     @State private var latestMeasuredContentHeight: CGFloat = 0
 
@@ -69,7 +71,9 @@ struct NotchWidgetView: View {
             sessions: store.sessions,
             acknowledgments: store.acknowledgments
         )
-        let shouldHide = summary.activeSessionCount == 0 && hideWhenEmpty
+        // Uma decisão pendente segura o painel: escondê-lo deixava um agente
+        // parado sem nada visível a dizê-lo.
+        let shouldHide = summary.activeSessionCount == 0 && hideWhenEmpty && !store.hasPendingDecision
         let leftEntries = summary.visibleEntries.filter { $0.kind != .blocked }
         let rightEntries = summary.visibleEntries.filter { $0.kind == .blocked }
         let showsIdleMark = summary.activeSessionCount == 0
@@ -150,7 +154,18 @@ struct NotchWidgetView: View {
                         .opacity(isExpanded ? 1 : 0)
                         .allowsHitTesting(isExpanded)
                     }
-                    if isExpanded {
+                    if isExpanded, let decision = store.pendingDecision {
+                        PermissionDecisionCard(
+                            request: decision,
+                            now: decisionClock,
+                            decide: { store.decide(decision, $0) },
+                            reveal: collapseMenu
+                        )
+                        .frame(width: menuContentWidth)
+                        .onReceive(
+                            Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+                        ) { decisionClock = $0 }
+                    } else if isExpanded {
                         SessionMenuCard(
                             sessions: store.sessions,
                             stateDirectoryURL: store.stateDirectoryURL,
@@ -325,8 +340,14 @@ struct NotchWidgetView: View {
             onMenuVisibilityChange(false)
         }
         .onChange(of: store.sessions.isEmpty) { _, isNowEmpty in
-            if isNowEmpty { collapseMenu() }
+            // Uma decisão pendente sobrevive à lista esvaziar: o pedido é a
+            // única coisa no painel e fechá-lo perdia-o.
+            if isNowEmpty, !store.hasPendingDecision { collapseMenu() }
         }
+        .onChange(of: store.hasPendingDecision) { _, isPending in
+            presentPendingDecision(isPending)
+        }
+        .onAppear { presentPendingDecision(store.hasPendingDecision) }
     }
 
     // MARK: Bar
@@ -511,6 +532,9 @@ struct NotchWidgetView: View {
         cancelPendingCollapse()
         hoverExpandWorkItem?.cancel()
         hoverExpandWorkItem = nil
+        // Com uma decisão aberta o painel não recolhe: tirar o rato de cima
+        // não é uma resposta, e o agente continua à espera.
+        guard !store.hasPendingDecision else { return }
         guard HoverInteraction.shouldCollapse(
             isExpanded: isExpanded,
             isHoveringPanel: isHoveringPanel,
@@ -518,6 +542,7 @@ struct NotchWidgetView: View {
             rowInteractionActive: rowInteractionActive
         ) else { return }
         let workItem = DispatchWorkItem {
+            guard !store.hasPendingDecision else { return }
             guard HoverInteraction.shouldCollapse(
                 isExpanded: isExpanded,
                 isHoveringPanel: isHoveringPanel,
@@ -572,6 +597,14 @@ struct NotchWidgetView: View {
         }
     }
 
+    /// Um pedido de permissão abre o painel por si. Do outro lado há um
+    /// processo bloqueado — esperar que passes o rato por cima seria esperar
+    /// por acaso.
+    private func presentPendingDecision(_ isPending: Bool) {
+        guard isPending else { return }
+        openMenu()
+    }
+
     private func updateOutsideClickMonitor(menuIsVisible: Bool) {
         if let outsideClickMonitor {
             NSEvent.removeMonitor(outsideClickMonitor)
@@ -581,6 +614,9 @@ struct NotchWidgetView: View {
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         ) { _ in
+            // Com uma decisão aberta, clicar fora não fecha: é precisamente
+            // assim que vais ao terminal ver o contexto antes de decidir.
+            guard !store.hasPendingDecision else { return }
             collapseMenu()
         }
     }
@@ -1173,7 +1209,10 @@ private struct SettingsGearButton: View {
 /// look of a menu item, rendered inside the row instead of a floating menu.
 /// The metrics line up optically with the roomier session row above while
 /// preserving a broad click target and rounded hover treatment.
-private struct ActionListRow: View {
+/// Interno e não privado: o cartão de decisão reutiliza-o, e ter dois botões
+/// com o mesmo aspeto desenhados em sítios diferentes era garantir que um dia
+/// divergiam.
+struct ActionListRow: View {
     let label: String
     let systemImage: String
     var isDestructive = false
