@@ -56,6 +56,30 @@ do {
         }
     case let .claudeHook(event, processID):
         let payload = try BoundedInput.read(from: .standardInput)
+
+        // O PermissionRequest é o único evento que responde. O processo fica
+        // aqui a bloquear enquanto o painel te mostra os botões, e o que
+        // imprimirmos no stdout é lido pelo Claude Code como a decisão.
+        if event == "PermissionRequest" {
+            let broker = PermissionBroker(stateDirectory: homeDirectory.appendingPathComponent("state"))
+            if let request = PermissionRequestReader.makeRequest(payload: payload) {
+                // Registar também como sessão a precisar de atenção, para a
+                // linha do painel acompanhar mesmo que o cartão seja fechado.
+                try? ClaudeHookProcessor(repository: repository).process(
+                    event: "Notification",
+                    payload: payload,
+                    environment: environment,
+                    processID: processID,
+                    notificationTypeOverride: "permission_prompt"
+                )
+                let decision = (try? broker.submitAndWait(request)) ?? .defer_
+                print(PermissionRequestReader.output(for: decision, request: request))
+            } else {
+                print("{}")
+            }
+            break
+        }
+
         try ClaudeHookProcessor(repository: repository).process(
             event: event,
             payload: payload,

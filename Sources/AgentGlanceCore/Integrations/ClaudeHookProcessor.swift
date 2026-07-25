@@ -29,13 +29,22 @@ public struct ClaudeHookProcessor: Sendable {
         payload: Data,
         environment: [String: String],
         processID: Int32,
-        now: Date = Date()
+        now: Date = Date(),
+        /// O PermissionRequest não traz `notification_type`, mas significa
+        /// exatamente o mesmo que um `permission_prompt`: força-se o tipo para
+        /// a linha do painel entrar em "precisa de ti" pelo caminho que já
+        /// existe, em vez de acrescentar um estado novo.
+        notificationTypeOverride: String? = nil
     ) throws {
         let input = try JSONDecoder().decode(Payload.self, from: payload)
         let existing = try repository.loadLifecycleSessions().first {
             $0.sessionID == input.sessionID
         }
-        let state = try state(for: event, notificationType: input.notificationType, existing: existing)
+        let state = try state(
+            for: event,
+            notificationType: notificationTypeOverride ?? input.notificationType,
+            existing: existing
+        )
         let session = AgentSession(
             tool: .claude,
             sessionID: input.sessionID,

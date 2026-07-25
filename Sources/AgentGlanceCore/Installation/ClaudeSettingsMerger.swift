@@ -7,12 +7,16 @@ public enum InstallationError: Error, Equatable, Sendable {
 }
 
 public enum ClaudeSettingsMerger {
-    private static let events: [(name: String, matcher: String?)] = [
-        ("SessionStart", nil),
-        ("Notification", "permission_prompt|idle_prompt"),
-        ("UserPromptSubmit", nil),
-        ("Stop", nil),
-        ("SessionEnd", nil),
+    private static let events: [(name: String, matcher: String?, timeout: Int?)] = [
+        ("SessionStart", nil, nil),
+        ("Notification", "permission_prompt|idle_prompt", nil),
+        ("UserPromptSubmit", nil, nil),
+        ("Stop", nil, nil),
+        ("SessionEnd", nil, nil),
+        // Este é o único que bloqueia: o processo do hook fica à espera da tua
+        // decisão e o Claude Code espera com ele. O timeout é a rede de
+        // segurança — passado ele, o diálogo normal aparece no terminal.
+        ("PermissionRequest", nil, 180),
     ]
 
     public static func merge(settingsData: Data, hookCommand: String) throws -> Data {
@@ -24,7 +28,7 @@ public enum ClaudeSettingsMerger {
             var groups = allHooks[event.name] as? [[String: Any]] ?? []
             let command = command(hookCommand: hookCommand, eventName: event.name)
             if !contains(command: command, in: groups) {
-                groups.append(group(command: command, matcher: event.matcher))
+                groups.append(group(command: command, matcher: event.matcher, timeout: event.timeout))
             }
             allHooks[event.name] = groups
         }
@@ -68,10 +72,12 @@ public enum ClaudeSettingsMerger {
         }
     }
 
-    private static func group(command: String, matcher: String?) -> [String: Any] {
-        var group: [String: Any] = [
-            "hooks": [["type": "command", "command": command]],
-        ]
+    private static func group(command: String, matcher: String?, timeout: Int? = nil) -> [String: Any] {
+        var hook: [String: Any] = ["type": "command", "command": command]
+        if let timeout {
+            hook["timeout"] = timeout
+        }
+        var group: [String: Any] = ["hooks": [hook]]
         if let matcher {
             group["matcher"] = matcher
         }

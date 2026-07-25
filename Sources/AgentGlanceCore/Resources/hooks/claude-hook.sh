@@ -14,5 +14,14 @@ case "$tty_name" in
 esac
 export AGENTGLANCE_TTY
 
+# O PermissionRequest é o único evento que devolve alguma coisa: o processo
+# fica a bloquear enquanto esperas, e o que sair no stdout é lido pelo Claude
+# Code como a decisão. Todos os outros continuam fire-and-forget, que é mais
+# rápido e não tem como atrasar um agente.
+if [ "$event" = "PermissionRequest" ]; then
+    "$script_directory/agentglance" hook claude "$event" --pid "$PPID" 2>/dev/null || true
+    exit 0
+fi
+
 "$script_directory/agentglance" hook claude "$event" --pid "$PPID" >/dev/null 2>&1 || true
 exit 0
