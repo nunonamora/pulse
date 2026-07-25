@@ -18,7 +18,7 @@ enum ScreenShot {
 
     nonisolated static let defaultPath = "/tmp/agentglance-shot.png"
 
-    static func captureTop(height: CGFloat = 240, to path: String = defaultPath) async -> String {
+    static func captureTop(height: CGFloat = 560, to path: String = defaultPath) async -> String {
         guard CGPreflightScreenCaptureAccess() else {
             _ = CGRequestScreenCaptureAccess()
             return "sem autorização de gravação de ecrã"

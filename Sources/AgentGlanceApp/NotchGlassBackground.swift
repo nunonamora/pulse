@@ -44,6 +44,31 @@ struct NotchGlassBackdrop: View {
     }
 }
 
+/// Vidro numa forma de cantos redondos, para superfícies que não são a
+/// silhueta do notch.
+///
+/// O cartão de decisão precisa do mesmo material que o painel, mas a sua forma
+/// não tem ombros nem se agarra ao topo do ecrã. Tudo o resto — o backdrop
+/// privado, o recuo para o desfoque normal em sistemas sem ele — é partilhado.
+struct GlassSurface: View {
+    var cornerRadius: CGFloat = 14
+    var frostRadius: Double = NotchGlassStyle.defaultFrostRadius
+
+    var body: some View {
+        Group {
+            if NotchCustomGlassView.isSupported {
+                NotchCustomGlassBackdrop(
+                    cornerStyle: .roundedRect(radius: cornerRadius),
+                    frostRadius: frostRadius
+                )
+            } else {
+                NotchVisualEffectBackdrop(cornerStyle: .roundedRect(radius: cornerRadius))
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
 /// The SwiftUI-drawn half: the black scrim over the glass. Pure vector
 /// content, so it can ride through layer effects like the expansion ripple.
 struct NotchGlassScrim: View {
@@ -249,6 +274,9 @@ final class NotchCustomGlassView: NSView {
         sdfLayer?.frame = bounds
         sdfContainer?.frame = bounds
         switch cornerStyle {
+        case let .roundedRect(requested):
+            sdfElement?.frame = bounds
+            sdfElement?.cornerRadius = min(requested, bounds.width / 2, bounds.height / 2)
         case .hangingNotch:
             // The lens element is the silhouette's straight-sided body: inset
             // by the shoulder radius so its rounded bottom corners coincide
@@ -366,9 +394,12 @@ private struct NotchVisualEffectBackdrop: NSViewRepresentable {
         // collapsed), which a fixed stretchable image cannot express, so its
         // subclass re-derives the mask per size; the notch keeps the static
         // stretched silhouette.
-        let view = cornerStyle == .bubble
-            ? BubbleMaskVisualEffectView()
-            : NSVisualEffectView()
+        let view: NSVisualEffectView
+        switch cornerStyle {
+        case .bubble:                 view = BubbleMaskVisualEffectView()
+        case let .roundedRect(radius): view = FixedRadiusVisualEffectView(radius: radius)
+        case .hangingNotch:           view = NSVisualEffectView()
+        }
         view.blendingMode = .behindWindow
         // fullScreenUI transmits far more backdrop color than hudWindow; the
         // scrim above supplies whatever darkening legibility still needs.
@@ -412,6 +443,28 @@ private struct NotchVisualEffectBackdrop: NSViewRepresentable {
 
 /// Behind-window blur masked to the bubble/capsule silhouette. The corner
 /// radius clamps to the half-height, so the mask must be re-derived as the
+/// Máscara de raio fixo, para o cartão de decisão: ao contrário da bolha, o
+/// raio não segue a altura, por isso basta gerá-la uma vez.
+private final class FixedRadiusVisualEffectView: NSVisualEffectView {
+    private let radius: CGFloat
+    private var installed = false
+
+    init(radius: CGFloat) {
+        self.radius = radius
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func layout() {
+        super.layout()
+        guard !installed, radius > 0 else { return }
+        installed = true
+        maskImage = BubbleMaskVisualEffectView.stretchableMask(radius: radius)
+    }
+}
+
 /// expand spring changes the view's size; regeneration only happens while the
 /// clamped radius is actually moving, and the image itself stays tiny.
 private final class BubbleMaskVisualEffectView: NSVisualEffectView {
@@ -426,12 +479,12 @@ private final class BubbleMaskVisualEffectView: NSVisualEffectView {
         )
         guard radius > 0, radius != installedRadius else { return }
         installedRadius = radius
-        maskImage = Self.bubbleMask(radius: radius)
+        maskImage = Self.stretchableMask(radius: radius)
     }
 
     /// Stretchable rounded-rect mask: all four arcs live inside the cap
     /// insets, so resizing stretches only the flat middle.
-    private static func bubbleMask(radius: CGFloat) -> NSImage {
+    static func stretchableMask(radius: CGFloat) -> NSImage {
         let size = NSSize(width: radius * 2 + 4, height: radius * 2 + 4)
         let image = NSImage(size: size, flipped: true) { rect in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }

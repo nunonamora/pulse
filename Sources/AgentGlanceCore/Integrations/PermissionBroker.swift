@@ -12,8 +12,12 @@ public struct PermissionRequest: Codable, Identifiable, Equatable, Sendable {
     public let summary: String
     /// O corpo por inteiro — comando, diff ou plano.
     public let detail: String?
-    /// Verdadeiro quando o corpo é um plano e se lê como markdown.
-    public let detailIsMarkdown: Bool
+    /// Como o corpo se deve ler.
+    ///
+    /// Era um `detailIsMarkdown: Bool`, e um booleano só sabia distinguir
+    /// plano de "tudo o resto" — pelo que um comando, um diff e um dump de
+    /// JSON chegavam ao cartão como o mesmo bloco de texto cru.
+    public let detailKind: PermissionDetailKind
     /// As opções de "permitir sempre" que o diálogo do terminal mostraria.
     public let suggestions: [AnyCodable]
     public let createdAt: Date
@@ -23,7 +27,7 @@ public struct PermissionRequest: Codable, Identifiable, Equatable, Sendable {
 
     public init(
         id: String, sessionID: String, tool: AgentTool, cwd: String,
-        toolName: String, summary: String, detail: String?, detailIsMarkdown: Bool,
+        toolName: String, summary: String, detail: String?, detailKind: PermissionDetailKind,
         suggestions: [AnyCodable], createdAt: Date, expiresAt: Date
     ) {
         self.id = id
@@ -33,11 +37,26 @@ public struct PermissionRequest: Codable, Identifiable, Equatable, Sendable {
         self.toolName = toolName
         self.summary = summary
         self.detail = detail
-        self.detailIsMarkdown = detailIsMarkdown
+        self.detailKind = detailKind
         self.suggestions = suggestions
         self.createdAt = createdAt
         self.expiresAt = expiresAt
     }
+}
+
+/// A forma do corpo de um pedido, que decide como o cartão o desenha.
+public enum PermissionDetailKind: String, Codable, Sendable {
+    /// Uma linha de comandos. Monoespaçada, quebrada por palavras.
+    case command
+    /// Alterações a um ficheiro, em linhas `-` e `+`.
+    case diff
+    /// Conteúdo novo de um ficheiro, ou qualquer texto longo.
+    case content
+    /// Um plano, escrito em markdown.
+    case plan
+    /// Pares campo/valor. É o que substitui o dump de JSON: os argumentos de
+    /// uma ferramenta desconhecida são dados, e liam-se como despejo.
+    case fields
 }
 
 /// O que o utilizador decidiu.

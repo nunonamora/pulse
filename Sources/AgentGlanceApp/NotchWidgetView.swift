@@ -41,6 +41,8 @@ final class NotchPointerTracker: ObservableObject {
 struct NotchWidgetView: View {
     @Bindable var store: StateStore
     @AppStorage("hideWhenEmpty") private var hideWhenEmpty = false
+    @AppStorage("skipDecisionWhenTerminalVisible")
+    private var skipDecisionWhenTerminalVisible = true
     @AppStorage("glassFrostRadiusNotch") private var notchFrostRadius = NotchGlassStyle.defaultFrostRadius
     @AppStorage("glassTintOpacityNotch") private var notchTintOpacity = NotchGlassStyle.defaultTintOpacity
     @AppStorage("glassFrostRadiusPill") private var pillFrostRadius = NotchGlassStyle.defaultFrostRadius
@@ -177,9 +179,15 @@ struct NotchWidgetView: View {
                             request: decision,
                             now: decisionClock,
                             decide: { store.decide(decision, $0) },
-                            reveal: collapseMenu
+                            reveal: collapseMenu,
+                            bandInset: layout.expandedContentSideInset,
+                            textInset: SessionMenuLayout.expandedHeaderLeadingInset
+                                + layout.expandedContentSideInset
                         )
-                        .frame(width: menuContentWidth)
+                        // Largura do painel inteiro, ao contrário da lista: a
+                        // faixa escura da decisão vai de bordo a bordo, e para
+                        // isso precisa de saber onde os bordos estão.
+                        .frame(width: menuWidth)
                         .onAppear { decisionClock = Date() }
                         .onReceive(
                             Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -647,6 +655,7 @@ struct NotchWidgetView: View {
     /// fecha normalmente é a saída do rato, e o rato nunca lá esteve.
     private func presentPendingDecision(_ isPending: Bool) {
         if isPending {
+            if deferToVisibleTerminal() { return }
             openedByDecision = !isExpanded
             openMenu()
         } else if openedByDecision {
@@ -654,6 +663,25 @@ struct NotchWidgetView: View {
             guard !isHoveringPanel else { return }
             collapseMenu()
         }
+    }
+
+    /// Se já tens o painel do agente à frente, o cartão não aparece.
+    ///
+    /// Do outro lado do hook, `defer` faz o Claude Code desenhar o diálogo dele
+    /// no terminal — que é onde já estás a olhar. Mostrar o cartão além disso
+    /// dava-te dois sítios para responder à mesma pergunta, e obrigava-te a
+    /// escolher onde carregar antes de escolheres o que responder.
+    ///
+    /// Só dispara com identidade do painel confirmada. Um "sim" errado deixava
+    /// o agente parado num diálogo fora do ecrã até ao fim do prazo; um "não"
+    /// errado custa um cartão a mais.
+    private func deferToVisibleTerminal() -> Bool {
+        guard skipDecisionWhenTerminalVisible, let request = store.pendingDecision,
+              let session = store.sessions.first(where: { $0.sessionID == request.sessionID }),
+              TerminalVisibility.isOnScreen(session)
+        else { return false }
+        store.decide(request, .defer_)
+        return true
     }
 
     private func updateOutsideClickMonitor(menuIsVisible: Bool) {

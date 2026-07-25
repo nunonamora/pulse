@@ -294,22 +294,18 @@ final class Voice {
 
     // MARK: - Quando NÃO falar
 
-    /// Sessões que a app considera estar à tua frente neste momento.
-    ///
-    /// Preenchido pela app, que já sabe casar sessões com o terminal em foco.
-    /// Fica aqui e não é calculado a cada anúncio: consultar o Ghostty no
-    /// caminho de uma frase seria caro e podia atrasá-la.
-    var focusedSessionIDs: Set<String> = []
-
     /// Estás a olhar para o terminal desta sessão? Então já sabes.
+    ///
+    /// Isto esteve morto durante muito tempo sem dar sinal: a versão anterior
+    /// exigia que o id da sessão constasse de um conjunto `focusedSessionIDs`
+    /// que se dizia "preenchido pela app" e que nada preenchia. O conjunto
+    /// estava sempre vazio, a condição era sempre falsa, e a voz anunciava
+    /// alegremente coisas que tinhas à frente dos olhos.
+    ///
+    /// `TerminalVisibility` responde à mesma pergunta a sério, e com cache —
+    /// que é o que a versão anterior queria evitar pagar aqui.
     private func isLookingAtIt(_ session: AgentSession) -> Bool {
-        guard let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return false }
-        let terminals: Set<String> = [
-            "com.mitchellh.ghostty", "com.apple.Terminal", "com.googlecode.iterm2",
-            "net.kovidgoyal.kitty", "dev.warp.Warp-Stable", "io.alacritty",
-        ]
-        guard terminals.contains(front) else { return false }
-        return focusedSessionIDs.contains(session.id)
+        TerminalVisibility.isOnScreen(session)
     }
 
     /// Não Incomodar e modos de Concentração. Lido do ficheiro de asserções,

@@ -14,6 +14,8 @@ struct AgentGlanceSettingsView: View {
     @AppStorage("voiceSilentOnCall") private var voiceSilentOnCall = true
     @AppStorage("voiceUseSystem") private var voiceUseSystem = false
     @AppStorage("screenSelectionMode") private var screenSelectionMode = ScreenSelectionMode.pointer.rawValue
+    @AppStorage("skipDecisionWhenTerminalVisible")
+    private var skipDecisionWhenTerminalVisible = true
     @AppStorage("glassFrostRadiusNotch") private var notchFrostRadius = NotchGlassStyle.defaultFrostRadius
     @AppStorage("glassTintOpacityNotch") private var notchTintOpacity = NotchGlassStyle.defaultTintOpacity
     @AppStorage("glassFrostRadiusPill") private var pillFrostRadius = NotchGlassStyle.defaultFrostRadius
@@ -52,6 +54,13 @@ struct AgentGlanceSettingsView: View {
                     set: updateLoginItem
                 ))
                 Toggle("Hide when no sessions are active", isOn: $hideWhenEmpty)
+                Toggle(
+                    "Skip the permission card when that terminal is already in front",
+                    isOn: $skipDecisionWhenTerminalVisible
+                )
+                Text("The agent's own prompt is already on screen there, so the card would just be a second place to answer the same question.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
                 Picker("Show the notch on", selection: $screenSelectionMode) {
                     Text("Screen with pointer").tag(ScreenSelectionMode.pointer.rawValue)
                     Text("Screen with focused window").tag(ScreenSelectionMode.focusedWindow.rawValue)

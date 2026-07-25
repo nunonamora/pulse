@@ -15,6 +15,9 @@ public enum HangingNotchMetrics {
 public enum HangingNotchCornerStyle: Equatable, Sendable {
     case hangingNotch
     case bubble
+    /// Retângulo de cantos redondos, para superfícies de vidro que não são a
+    /// silhueta — o cartão de decisão dentro do painel.
+    case roundedRect(radius: CGFloat)
 }
 
 /// Shared path geometry for the top-attached notch/drop silhouette. The top
@@ -32,6 +35,17 @@ public enum HangingNotchGeometry {
               rect.height.isFinite,
               rect.width > 0,
               rect.height > 0 else {
+            return path
+        }
+
+        if case let .roundedRect(requested) = style {
+            let radius = min(
+                sanitizedRadius(requested), rect.width / 2, rect.height / 2
+            )
+            path.addPath(CGPath(
+                roundedRect: rect,
+                cornerWidth: radius, cornerHeight: radius, transform: nil
+            ))
             return path
         }
 
