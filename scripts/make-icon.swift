@@ -146,11 +146,21 @@ func drawIcon(px: Int) -> CGImage {
         // letra deixa de ser um rótulo colado por cima e passa a ser feita do
         // assunto.
         let cx = body.midX, cy = body.midY
-        let h = body.height * 0.62
+        // Em miniatura a letra é outra letra.
+        //
+        // A onda desaparece: a 16 px a amplitude cabe em meio pixel e o que
+        // sobra não se lê como ondulação, lê-se como haste torta — o desenho
+        // passa a parecer defeituoso em vez de vivo. Sem ela, e com a letra
+        // maior e mais grossa, cada traço assenta em pixels inteiros.
+        //
+        // O bojo cresce e o traço afina em proporção, senão a contraforma
+        // fecha: a 16 px o buraco do P tinha um pixel, que o antialiasing
+        // transformava num borrão cinzento no meio de uma mancha branca.
+        let h = body.height * (detailed ? 0.62 : 0.72)
         let top = cy + h / 2, bottom = cy - h / 2
-        let thickness = body.width * 0.125
-        let stemX = cx - body.width * 0.185 + body.width * 0.045
-        let amplitude = body.width * 0.021
+        let thickness = body.width * (detailed ? 0.125 : 0.132)
+        let stemX = cx - body.width * 0.185 + body.width * (detailed ? 0.045 : 0.030)
+        let amplitude = detailed ? body.width * 0.021 : 0
         let cycles: CGFloat = 1.15
 
         if detailed {
@@ -187,8 +197,8 @@ func drawIcon(px: Int) -> CGImage {
                                 lineJoin: .round, miterLimit: 10)
 
         // O bojo: um anel limpo, do mesmo peso, encostado ao alto da haste.
-        let bowlR = h * 0.235
-        let bowlCX = wave(0.10) + bowlR * 0.60
+        let bowlR = h * (detailed ? 0.235 : 0.275)
+        let bowlCX = wave(0.10) + bowlR * (detailed ? 0.60 : 0.56)
         let bowlCY = top - bowlR * 0.98
         let arc = CGMutablePath()
         arc.addArc(center: CGPoint(x: bowlCX, y: bowlCY), radius: bowlR,
@@ -196,11 +206,19 @@ func drawIcon(px: Int) -> CGImage {
         let ring = arc.copy(strokingWithWidth: thickness, lineCap: .round,
                             lineJoin: .round, miterLimit: 10)
 
-        let ink = CGGradient(colorsSpace: colorSpace, colors: [
-            CGColor(red: 1, green: 1, blue: 1, alpha: 0.98),
-            CGColor(red: 0.86, green: 0.86, blue: 0.90, alpha: 1),
-            CGColor(red: 0.58, green: 0.58, blue: 0.63, alpha: 1),
-        ] as CFArray, locations: [0, 0.5, 1])!
+        // Branco chapado em miniatura. O gradiente dá volume a 256 e a 16
+        // rouba contraste: o fundo do P sai cinzento-médio contra um corpo
+        // quase preto, e a letra perde a aresta que a torna legível.
+        let ink = detailed
+            ? CGGradient(colorsSpace: colorSpace, colors: [
+                CGColor(red: 1, green: 1, blue: 1, alpha: 0.98),
+                CGColor(red: 0.86, green: 0.86, blue: 0.90, alpha: 1),
+                CGColor(red: 0.58, green: 0.58, blue: 0.63, alpha: 1),
+              ] as CFArray, locations: [0, 0.5, 1])!
+            : CGGradient(colorsSpace: colorSpace, colors: [
+                CGColor(red: 1, green: 1, blue: 1, alpha: 1),
+                CGColor(red: 1, green: 1, blue: 1, alpha: 1),
+              ] as CFArray, locations: [0, 1])!
         for shape in [ring, ribbon] {
             context.saveGState()
             context.addPath(shape)

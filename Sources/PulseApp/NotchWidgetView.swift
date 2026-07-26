@@ -980,7 +980,11 @@ private struct SessionMenuCard: View {
                         .foregroundStyle(.white.opacity(0.7))
                     Text("Start Claude, Codex or OpenCode in a terminal and it shows up here.")
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.42))
+                        // 0,52 e não 0,42. Medido sobre o retrato: a 0,42 dava
+                        // 4,1:1 de contraste, abaixo do 4,5 que texto corrido
+                        // precisa. É a única frase da app que alguém lê de
+                        // primeira vez, e era a menos legível de todas.
+                        .foregroundStyle(.white.opacity(0.52))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.horizontal, 14)

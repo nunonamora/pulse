@@ -396,7 +396,13 @@ private struct DecisionButton: View {
                     )
             )
         }
-        .buttonStyle(.plain)
+        // Reagir ao toque, e não só à passagem do rato.
+        //
+        // `.plain` não dá estado de pressionado: o botão acendia ao aproximar o
+        // rato e depois não acontecia nada visível ao carregar. Num cartão que
+        // decide se um comando corre ou não, ver o clique registar-se é o que
+        // separa "carreguei" de "acho que carreguei".
+        .buttonStyle(PressableButtonStyle())
         .onHover { isHovering = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovering)
     }
@@ -415,6 +421,19 @@ private struct DecisionButton: View {
         case .destructive: return .red.opacity(isHovering ? 0.34 : 0.20)
         case .quiet:       return .white.opacity(isHovering ? 0.12 : 0.06)
         }
+    }
+}
+
+/// Encolhe e escurece enquanto está a ser carregado.
+///
+/// 0,96 e não menos: um botão de 28 pt de alto a encolher mais do que isto
+/// salta em vez de responder.
+private struct PressableButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .opacity(configuration.isPressed ? 0.82 : 1)
+            .animation(.easeOut(duration: 0.09), value: configuration.isPressed)
     }
 }
 
