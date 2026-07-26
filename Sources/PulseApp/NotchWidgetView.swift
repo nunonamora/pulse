@@ -967,6 +967,33 @@ private struct StatusSummaryIndicator: View {
     }
 }
 
+/// O anel de contexto: enche no sentido do relógio e muda de cor quando o
+/// assunto passa de informação a aviso.
+private struct ContextGauge: View {
+    let reading: ContextMeter.Reading
+
+    private var tint: Color {
+        switch reading.fraction {
+        case ..<0.7:  return .white.opacity(0.45)
+        case ..<0.9:  return Color(red: 0.98, green: 0.71, blue: 0.30)
+        default:      return Color(red: 0.97, green: 0.38, blue: 0.36)
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(.white.opacity(0.14), lineWidth: 2)
+            Circle()
+                .trim(from: 0, to: reading.fraction)
+                .stroke(tint, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: 12, height: 12)
+        .accessibilityLabel("Context \(Int(reading.fraction * 100)) percent full")
+    }
+}
+
 /// The classic braille dot-matrix spinner used across CLI tools (ora,
 /// Convoy's own progress indicator) — several dots lit per frame rather
 /// than one pixel chasing itself. Monochrome by design so the green and red
@@ -1304,6 +1331,8 @@ private struct SessionRow: View {
 
     @State private var isHovered = false
     @State private var branchName: String?
+    /// A última medição de contexto, lida da cauda do transcript.
+    @State private var contextReading: ContextMeter.Reading?
     @State private var mode: ActionMode = .menu
     @State private var renameDraft = ""
     /// O feedback da cópia vive aqui, na linha, pela mesma razão que o
@@ -1384,6 +1413,14 @@ private struct SessionRow: View {
         // Lazy rows request branch data only while visible. Disappearance
         // cancels queued work through the coordinator; the menu-scoped cache
         // is discarded on close so a later open sees branch switches.
+        .task(id: session.updatedAt) { [path = session.transcriptPath] in
+            guard let path else { return }
+            let reading = await Task.detached(priority: .utility) {
+                ContextMeter.reading(transcriptPath: path)
+            }.value
+            guard !Task.isCancelled else { return }
+            contextReading = reading
+        }
         .task(id: session.currentStep == nil ? session.cwd : nil) { [cwd = session.cwd] in
             branchName = nil
             guard session.currentStep == nil else { return }
@@ -1392,6 +1429,16 @@ private struct SessionRow: View {
             branchName = resolved
         }
         .accessibilityLabel("\(title), \(session.status.accessibilityName)")
+    }
+
+    /// No retrato não há ciclo de execução para o `.task`: lê-se em linha.
+    /// Na app nunca — um stat de ficheiro por fotograma seria pagar I/O no
+    /// caminho de desenho.
+    private var effectiveReading: ContextMeter.Reading? {
+        if isStaticRender, let path = session.transcriptPath {
+            return ContextMeter.reading(transcriptPath: path)
+        }
+        return contextReading
     }
 
     /// A pasta acrescenta alguma coisa ao que o título já diz?
@@ -1463,6 +1510,21 @@ private struct SessionRow: View {
                 .lineLimit(1)
             }
             Spacer(minLength: 8)
+            // O medidor de contexto: um anel que enche com a janela do agente.
+            //
+            // Ideia vista no AgentNotch e adotada porque é a única informação
+            // acionável sobre uma sessão que nada no ecrã dá: um agente a 85%
+            // vai compactar em breve, e sabê-lo ANTES muda o que se lhe pede.
+            // Só aparece quando há transcript e leitura — zero inventado seria
+            // pior do que nada.
+            if let reading = effectiveReading {
+                ContextGauge(reading: reading)
+                    .help(String(
+                        format: "Context %d%% — %dk of %dk tokens",
+                        Int(reading.fraction * 100),
+                        reading.tokens / 1000, reading.window / 1000
+                    ))
+            }
             // O número do atalho, só enquanto o teclado tem a lista.
             //
             // Ensina ⌘N exatamente quando ele serve, e desaparece assim que se
@@ -2087,23 +2149,32 @@ enum UIRender {
     }
 
     /// Sessões de exemplo que cobrem os estados que a lista sabe desenhar.
+    /// Sessões de exemplo, incluindo transcripts de amostra para o medidor de
+    /// contexto: um vermelho (92%), um âmbar (76%), um branco (30%).
     private static func sampleSessions() -> [AgentSession] {
         let now = Date()
+        func transcript(_ name: String, tokens: Int) -> String {
+            let path = "/tmp/pulse-ui-fixtures-\(name).jsonl"
+            let line = #"{"message":{"model":"claude-opus-5","usage":{"input_tokens":2,"cache_read_input_tokens":\#(tokens),"cache_creation_input_tokens":0,"output_tokens":10}}}"#
+            try? (line + "\n").write(toFile: path, atomically: true, encoding: .utf8)
+            return path
+        }
         func make(
             _ tool: AgentTool, _ name: String, _ status: SessionStatus,
-            _ reason: AttentionReason? = nil, minutes: Double
+            _ reason: AttentionReason? = nil, minutes: Double, tokens: Int? = nil
         ) -> AgentSession {
             AgentSession(
                 tool: tool, sessionID: name, pid: 1, status: status,
                 attentionReason: reason, cwd: "/Users/você/coding/\(name)",
-                startedAt: now.addingTimeInterval(-minutes * 60), updatedAt: now
+                startedAt: now.addingTimeInterval(-minutes * 60), updatedAt: now,
+                transcriptPath: tokens.map { transcript(name, tokens: $0) }
             )
         }
         return [
-            make(.claude, "pulse", .needsAttention, .permission, minutes: 3),
-            make(.claude, "hermes", .working, minutes: 42),
+            make(.claude, "pulse", .needsAttention, .permission, minutes: 3, tokens: 184_000),
+            make(.claude, "hermes", .working, minutes: 42, tokens: 152_000),
             make(.codex, "siva", .idle, minutes: 128),
-            make(.opencode, "um-projeto-com-nome-comprido", .idle, minutes: 7),
+            make(.opencode, "um-projeto-com-nome-comprido", .idle, minutes: 7, tokens: 61_000),
         ]
     }
 }

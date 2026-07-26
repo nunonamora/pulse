@@ -26,6 +26,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var instanceLock: SingleInstanceLock?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Os sinais primeiro, antes de qualquer coisa que possa demorar.
+        //
+        // A ação por omissão de USR1/USR2 é TERMINAR o processo. Estavam a ser
+        // instalados no fim do arranque, depois do painel e do pré-aquecer da
+        // voz — e um sinal disparado nessa janela (um script a pedir um
+        // retrato logo a seguir ao install) matava a app sem crash report,
+        // sem log, sem nada. Foi exatamente assim que a encontrámos morta.
+        installScreenshotSignal()
+        installRenderSignal()
+
         NSApp.setActivationPolicy(.accessory)
         let stateDirectory = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".pulse/state", isDirectory: true)
@@ -114,8 +124,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // atrasada com o sintetizador frio, e desencontrava-se do som de
             // assinatura que a antecede.
             Voice.shared.prewarm()
-            self.installScreenshotSignal()
-            self.installRenderSignal()
             // O atalho global. Registado depois do painel existir, para o
             // primeiro toque já encontrar alguém a quem falar.
             if UserDefaults.standard.object(forKey: "hotkeyEnabled") as? Bool ?? true {

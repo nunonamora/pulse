@@ -7638,6 +7638,7 @@ let tests: [(String, () throws -> Void)] = [
     ("decision log reads newest first and skips deferrals", testDecisionLogReadsNewestFirstAndSkipsDeferrals),
     ("decision log compacts past its cap", testDecisionLogCompactsPastItsCap),
     ("state store decision lands beside the state directory", testStateStoreDecisionLandsBesideTheStateDirectory),
+    ("context meter reads the newest usage from the tail", testContextMeterReadsLatestUsageFromTail),
 ]
 
 if CommandLine.arguments.count == 3,
@@ -7660,4 +7661,35 @@ if CommandLine.arguments.count == 3,
         FileHandle.standardError.write(Data("FAIL: \(error)\n".utf8))
         exit(1)
     }
+}
+
+func testContextMeterReadsLatestUsageFromTail() throws {
+    let path = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString + ".jsonl").path
+    defer { try? FileManager.default.removeItem(atPath: path) }
+    // Duas mensagens com uso: a ÚLTIMA é o estado da janela, a primeira é
+    // história. Uma linha de ruído pelo meio não pode partir a leitura.
+    let lines = [
+        #"{"message":{"model":"claude-opus-5","usage":{"input_tokens":10,"cache_read_input_tokens":50000,"cache_creation_input_tokens":100,"output_tokens":5}}}"#,
+        #"{"type":"progress","note":"sem usage nenhum"}"#,
+        #"{"message":{"model":"claude-opus-5","usage":{"input_tokens":2,"cache_read_input_tokens":120000,"cache_creation_input_tokens":800,"output_tokens":9}}}"#,
+    ]
+    try (lines.joined(separator: "\n") + "\n").write(toFile: path, atomically: true, encoding: .utf8)
+
+    guard let reading = ContextMeter.reading(transcriptPath: path) else {
+        throw TestFailure.expectation("context meter read nothing from a transcript with usage")
+    }
+    try expect(reading.tokens, equals: 120_802, "context tokens come from the newest usage line")
+    try expect(reading.window, equals: 200_000, "standard window inferred for a normal-sized request")
+
+    // Um pedido maior do que a janela normal prova sozinho a janela longa.
+    let big = #"{"message":{"model":"claude-opus-5","usage":{"input_tokens":2,"cache_read_input_tokens":624000,"cache_creation_input_tokens":0,"output_tokens":1}}}"#
+    try (big + "\n").write(toFile: path, atomically: true, encoding: .utf8)
+    guard let long = ContextMeter.reading(transcriptPath: path) else {
+        throw TestFailure.expectation("context meter read nothing from the oversized transcript")
+    }
+    try expect(long.window, equals: 1_000_000, "oversized usage promotes the window")
+
+    try expect(ContextMeter.reading(transcriptPath: "/nonexistent/x.jsonl") == nil, equals: true,
+               "missing transcript reads as nothing, not as zero")
 }

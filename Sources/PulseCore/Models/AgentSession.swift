@@ -131,6 +131,9 @@ public struct AgentSession: Codable, Identifiable, Equatable, Sendable {
     /// The pipeline step a convoy run is currently executing; nil for
     /// conversational tools, which have no notion of a step.
     public let currentStep: String?
+    /// Onde o Claude Code escreve o transcript desta sessão. É a fonte do
+    /// medidor de contexto; vem no payload de todos os hooks.
+    public let transcriptPath: String?
 
     public var id: String { "\(tool.rawValue)-\(sessionID)" }
     public var projectName: String { URL(fileURLWithPath: cwd).lastPathComponent }
@@ -149,7 +152,8 @@ public struct AgentSession: Codable, Identifiable, Equatable, Sendable {
             updatedAt: updatedAt,
             terminal: terminal,
             source: source,
-            currentStep: currentStep
+            currentStep: currentStep,
+            transcriptPath: transcriptPath
         )
     }
 
@@ -185,7 +189,8 @@ public struct AgentSession: Codable, Identifiable, Equatable, Sendable {
             updatedAt: updatedAt,
             terminal: terminal,
             source: source,
-            currentStep: currentStep
+            currentStep: currentStep,
+            transcriptPath: transcriptPath
         )
     }
 
@@ -202,7 +207,8 @@ public struct AgentSession: Codable, Identifiable, Equatable, Sendable {
         updatedAt: Date,
         terminal: TerminalContext = TerminalContext(),
         source: SessionSource? = nil,
-        currentStep: String? = nil
+        currentStep: String? = nil,
+        transcriptPath: String? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.tool = tool
@@ -217,6 +223,7 @@ public struct AgentSession: Codable, Identifiable, Equatable, Sendable {
         self.terminal = terminal
         self.source = source
         self.currentStep = currentStep
+        self.transcriptPath = transcriptPath
     }
 
     enum CodingKeys: String, CodingKey {
@@ -233,6 +240,7 @@ public struct AgentSession: Codable, Identifiable, Equatable, Sendable {
         case terminal
         case source
         case currentStep = "current_step"
+        case transcriptPath = "transcript_path"
     }
 
     public static func decode(from data: Data) throws -> AgentSession {

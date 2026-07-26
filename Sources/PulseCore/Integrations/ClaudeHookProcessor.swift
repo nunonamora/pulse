@@ -10,11 +10,13 @@ public struct ClaudeHookProcessor: Sendable {
         let sessionID: String
         let cwd: String
         let notificationType: String?
+        let transcriptPath: String?
 
         enum CodingKeys: String, CodingKey {
             case sessionID = "session_id"
             case cwd
             case notificationType = "notification_type"
+            case transcriptPath = "transcript_path"
         }
     }
 
@@ -60,7 +62,8 @@ public struct ClaudeHookProcessor: Sendable {
             // Pulse aprendesse a capturar depois disso só chegava a
             // sessões novas. Foi o que aconteceu aos ids do cmux.
             terminal: terminalContext(for: input.cwd, environment: environment)
-                .completing(existing?.terminal)
+                .completing(existing?.terminal),
+            transcriptPath: input.transcriptPath ?? existing?.transcriptPath
         )
         try repository.save(session)
     }
