@@ -21,6 +21,11 @@ public enum SessionMenuLayout {
     public static let cardBottomPadding: CGFloat = 6
     public static let sessionListBottomPadding: CGFloat = 4
     public static let sessionRowHeight: CGFloat = 52
+    /// Uma decisão diz-se numa linha só — ícone, resumo, veredicto e há quanto
+    /// tempo —, ao contrário de uma sessão, que tem título e uma linha de
+    /// contexto por baixo. Mais baixa, cabem-lhe o dobro das entradas no mesmo
+    /// teto de altura, que é fixo e partilhado com a lista.
+    public static let decisionRowHeight: CGFloat = 34
     /// Three full rows plus the inline actions fit without shifting the row
     /// that received the click out from under the pointer. Longer lists still
     /// scroll inside the card.
@@ -43,6 +48,13 @@ public enum SessionMenuLayout {
         let rowsHeight = CGFloat(count) * sessionRowHeight
         let actionsHeight = hasExpandedActions ? expandedActionsHeight : 0
         return min(rowsHeight + actionsHeight, maximumSessionListHeight)
+    }
+
+    /// O histórico partilha o teto da lista: os dois vivem no mesmo painel, e um
+    /// deles a crescer mais do que o outro fazia a bolha saltar de altura só por
+    /// se carregar no relógio.
+    public static func decisionListHeight(recordCount: Int) -> CGFloat {
+        min(CGFloat(max(0, recordCount)) * decisionRowHeight, maximumSessionListHeight)
     }
 
     /// A scroll affordance belongs only to a list whose expanded content
