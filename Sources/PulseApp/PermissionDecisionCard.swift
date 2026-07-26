@@ -47,10 +47,9 @@ struct PermissionDecisionCard: View {
 
     private var risk: CommandRisk { CommandRisk.of(request) }
 
-    /// Teto do poço do corpo. Encolhe para caber o botão de "permitir sempre"
-    /// quando ele existe — o orçamento de altura do painel é fixo e alguma
-    /// coisa tem de ceder.
-    private var payloadHeight: CGFloat { hasAlwaysOption ? 104 : 144 }
+    /// Teto do poço do corpo. Fixo: desde que o "always allow" passou a link
+    /// na linha das ações, deixou de haver segunda linha a quem ceder altura.
+    private var payloadHeight: CGFloat { 144 }
 
     /// Altura real do corpo, medida.
     ///
@@ -92,7 +91,27 @@ struct PermissionDecisionCard: View {
         // por trás do texto e cada linha tinha de ser lida contra ícones do
         // desktop. O material continua a ler-se nas arestas e no resto do
         // painel, onde nada exige leitura desta.
-        .background(Color.black.opacity(0.74))
+        .background(alignment: .top) {
+            ZStack(alignment: .top) {
+                // O chão de contraste: nunca abaixo de 0,70. A tentação de
+                // deixar o vidro respirar já custou um ecrã ilegível; o que
+                // faz isto ler-se como material não é transparência, é a LUZ
+                // — o gradiente e a aresta especular por cima do fumo.
+                LinearGradient(
+                    colors: [.black.opacity(0.78), .black.opacity(0.70)],
+                    startPoint: .top, endPoint: .bottom
+                )
+                LinearGradient(
+                    colors: [.white.opacity(0.20), .white.opacity(0.02), .clear],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .frame(height: 30)
+                .blendMode(.plusLighter)
+            }
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(.black.opacity(0.35)).frame(height: 1)
+            }
+        }
         .padding(.horizontal, bandInset)
         .padding(.bottom, 6)
         .focusable()
@@ -189,8 +208,17 @@ struct PermissionDecisionCard: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(.black.opacity(0.45))
                 .overlay(
+                    // Um recesso em vidro: a aresta de baixo apanha mais luz do
+                    // que a de cima, ao contrário dos botões — é o que diz
+                    // "cavado" em vez de "pousado".
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(.white.opacity(0.06), lineWidth: 0.5)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [.white.opacity(0.04), .white.opacity(0.12)],
+                                startPoint: .top, endPoint: .bottom
+                            ),
+                            lineWidth: 0.5
+                        )
                 )
         )
         // Copiar o corpo sem decidir nada.
@@ -330,36 +358,36 @@ struct PermissionDecisionCard: View {
 
                 Spacer(minLength: 0)
 
-                Button {
-                    decide(.defer_)
-                    reveal()
-                } label: {
-                    Text("Decide in the terminal")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.45))
-                }
-                .buttonStyle(.plain)
-                .help("Leave it to the agent's own prompt and jump to that pane")
-            }
+                // As alternativas, juntas e discretas: nenhuma decide já.
+                // O "always allow" vivia órfão numa segunda linha — e é a
+                // única escolha daqui que não se desfaz, por isso continua do
+                // tamanho de um link e nunca do de um botão.
+                HStack(spacing: 6) {
+                    if hasAlwaysOption {
+                        Button { decide(.allowAlways) } label: {
+                            Text("Always allow")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.white.opacity(0.45))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Writes a permission rule. This one does not expire.")
 
-            if hasAlwaysOption {
-                // Pequeno, e o mais discreto dos três.
-                //
-                // Era uma barra a toda a largura, o maior alvo do cartão — e é
-                // a única decisão daqui que não se desfaz: escreve uma regra
-                // que passa a valer para sempre. O peso visual estava ao
-                // contrário do peso real.
-                Button { decide(.allowAlways) } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark.circle")
-                            .font(.system(size: 9.5))
-                        Text("Always allow this command")
+                        Text("·")
                             .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.3))
                     }
-                    .foregroundStyle(.white.opacity(0.45))
+
+                    Button {
+                        decide(.defer_)
+                        reveal()
+                    } label: {
+                        Text("Decide in the terminal")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.45))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Leave it to the agent's own prompt and jump to that pane")
                 }
-                .buttonStyle(.plain)
-                .help("Writes a permission rule. This one does not expire.")
             }
         }
     }
@@ -372,18 +400,24 @@ struct PermissionDecisionCard: View {
     /// esteve em baixo e a toda a largura, e sobre um fundo claro lia-se como
     /// uma laje cinzenta entre os botões — mais pesada do que a informação que
     /// carrega.
+    /// O rastilho. Não é uma barra de progresso: é o tempo a consumir-se na
+    /// cor do risco, com luz própria — a única coisa acesa do cartão, porque é
+    /// a única que muda sozinha. Pontas redondas e brilho são o que a separam
+    /// de uma linha perdida encostada ao topo.
     private var deadline: some View {
         GeometryReader { geo in
             let total = request.expiresAt.timeIntervalSince(request.createdAt)
             let fraction = total > 0
                 ? max(0, request.expiresAt.timeIntervalSince(now) / total)
                 : 0
-            Rectangle()
-                .fill(isUrgent ? Color.orange : risk.tint.opacity(0.65))
-                .frame(width: max(0, geo.size.width * fraction))
+            let tint = isUrgent ? Color.orange : risk.tint
+            Capsule()
+                .fill(tint.opacity(0.85))
+                .frame(width: max(4, geo.size.width * fraction))
+                .shadow(color: tint.opacity(0.55), radius: 3, y: 0)
                 .animation(.linear(duration: 1), value: fraction)
         }
-        .frame(height: 2)
+        .frame(height: 2.5)
     }
 }
 
@@ -418,14 +452,26 @@ private struct DecisionButton: View {
                 }
             }
             .foregroundStyle(foreground)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 12)
             .padding(.vertical, 6)
+            // Cápsula, não retângulo: é a forma do vidro no resto do sistema,
+            // e a aresta acesa em cima é o que a faz ler como lente e não
+            // como chip. O preenchimento é um gradiente vertical — vidro tem
+            // sempre um lado virado para a luz.
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(fill)
+                Capsule()
+                    .fill(fillGradient)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(.white.opacity(isHovering ? 0.22 : 0.12), lineWidth: 0.75)
+                        Capsule().strokeBorder(
+                            LinearGradient(
+                                colors: [
+                                    .white.opacity(isHovering ? 0.38 : 0.26),
+                                    .white.opacity(0.06),
+                                ],
+                                startPoint: .top, endPoint: .bottom
+                            ),
+                            lineWidth: 0.75
+                        )
                     )
             )
         }
@@ -447,10 +493,20 @@ private struct DecisionButton: View {
         }
     }
 
-    private var fill: Color {
+    private var fillGradient: LinearGradient {
         switch style {
-        case .primary:     return .white.opacity(isHovering ? 0.24 : 0.16)
-        case .destructive: return .red.opacity(isHovering ? 0.34 : 0.20)
+        case .primary:
+            return LinearGradient(
+                colors: [.white.opacity(isHovering ? 0.30 : 0.22),
+                         .white.opacity(isHovering ? 0.16 : 0.10)],
+                startPoint: .top, endPoint: .bottom
+            )
+        case .destructive:
+            return LinearGradient(
+                colors: [Color.red.opacity(isHovering ? 0.40 : 0.28),
+                         Color.red.opacity(isHovering ? 0.24 : 0.14)],
+                startPoint: .top, endPoint: .bottom
+            )
         }
     }
 }
