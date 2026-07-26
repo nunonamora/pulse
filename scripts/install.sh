@@ -42,6 +42,16 @@ step "Installing app to $app_destination"
 /bin/rm -rf "$app_destination"
 /usr/bin/ditto .build/Pulse.app "$app_destination"
 
+# Reregistar no LaunchServices.
+#
+# Sem isto o sistema continua a servir o ícone antigo de cache, e neste projeto
+# isso foi difícil de diagnosticar: o mesmo caminho em /Applications já teve
+# três nomes diferentes. O .icns no pacote estava certo e o que aparecia era
+# outro — cheguei a acusar o invólucro de compatibilidade do macOS 26 antes de
+# perceber que era cache.
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+    -f "$app_destination" 2>/dev/null || true
+
 step "Wiring agent hooks (Claude Code / OpenCode / Codex / Pi)"
 "$app_destination/Contents/Resources/bin/pulse" install
 
