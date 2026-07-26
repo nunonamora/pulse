@@ -28,10 +28,20 @@ struct NotchGlassBackdrop: View {
     /// User-tuned glass blur radius (Settings → Appearance → Frosted).
     var frostRadius: Double = NotchGlassStyle.defaultFrostRadius
     @Environment(\.isStaticRender) private var isStaticRender
+    /// "Reduzir transparência" da Acessibilidade.
+    ///
+    /// O NSVisualEffectView respeita-o sozinho; o caminho privado do
+    /// CABackdropLayer não sabe que ele existe — e quem pede menos
+    /// transparência ao sistema pede-o para todas as janelas, não para todas
+    /// menos esta. Um fundo opaco escuro é exatamente o que essa preferência
+    /// significa, e por acaso é também o desenho que este painel já usa nos
+    /// retratos: sólido, legível, sem material.
+    @State private var reduceTransparency =
+        NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
 
     var body: some View {
         Group {
-            if isStaticRender {
+            if isStaticRender || reduceTransparency {
                 // Num retrato para ficheiro o vidro não existe: é alimentado
                 // pelo servidor de janelas e sai em branco. Pior — sendo uma
                 // vista AppKit, faz o `ImageRenderer` devolver vista inválida e
@@ -46,6 +56,14 @@ struct NotchGlassBackdrop: View {
             }
         }
         .allowsHitTesting(false)
+        .onReceive(
+            NSWorkspace.shared.notificationCenter.publisher(
+                for: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification
+            )
+        ) { _ in
+            reduceTransparency =
+                NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        }
     }
 
     private var cornerStyle: HangingNotchCornerStyle {
