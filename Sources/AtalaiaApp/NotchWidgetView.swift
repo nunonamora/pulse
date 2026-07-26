@@ -4,6 +4,26 @@ import SwiftUI
 
 import AtalaiaCore
 
+/// Estamos a ser desenhados para um ficheiro, e não para um ecrã.
+///
+/// Existe por causa do `TimelineView`. Fora de ecrã não há relógio a que ele se
+/// agarre, e o `ImageRenderer` responde com o retângulo amarelo de vista
+/// inválida — o que tornava impossível retratar exatamente as partes mais
+/// visíveis da app, a lista e a barra. Quem depende do tempo pergunta por isto
+/// e desenha um instante fixo.
+///
+/// Só o retrato liga este sinal. O caminho normal não sabe que ele existe.
+private struct StaticRenderKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var isStaticRender: Bool {
+        get { self[StaticRenderKey.self] }
+        set { self[StaticRenderKey.self] = newValue }
+    }
+}
+
 struct NotchPointerSnapshot: Equatable {
     let isInside: Bool
     let revision: UInt
@@ -852,11 +872,12 @@ private struct StatusSummaryIndicator: View {
 /// dots remain easy to distinguish from active work.
 private struct WorkingPixelSpinner: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isStaticRender) private var isStaticRender
     private static let stepInterval: TimeInterval = 0.08
     private static let frames: [Character] = Array("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
     var body: some View {
-        if reduceMotion {
+        if reduceMotion || isStaticRender {
             frame(Self.frames[0])
         } else {
             TimelineView(.periodic(from: .now, by: Self.stepInterval)) { timeline in
@@ -1157,6 +1178,7 @@ private struct SessionRow: View {
     let kill: (AgentSession) -> Void
     let setKeyboardFocus: (Bool) -> Void
     let branchCoordinator: GitBranchResolutionCoordinator
+    @Environment(\.isStaticRender) private var isStaticRender
 
     /// Sub-modes of the inline action area: the button strip, the rename
     /// field, or the kill confirmation. All live inside the row itself so
@@ -1185,7 +1207,16 @@ private struct SessionRow: View {
             }
             // A right (or control) click also expands the actions inline;
             // the catcher passes every other event through.
-            .overlay(RightClickCatcher(onRightClick: toggleActions))
+            // Fora do retrato: é uma vista AppKit, e o `ImageRenderer` recusa
+            // desenhar qualquer árvore que embrulhe AppKit — devolvia o
+            // retângulo amarelo de vista inválida e levava a linha inteira com
+            // ele. Não pinta nada, só apanha cliques, por isso a sua ausência
+            // num ficheiro não muda uma única cor.
+            .overlay {
+                if !isStaticRender {
+                    RightClickCatcher(onRightClick: toggleActions)
+                }
+            }
             if isActionsExpanded {
                 actionArea
                     .padding(.horizontal, 8)
@@ -1234,6 +1265,25 @@ private struct SessionRow: View {
         .accessibilityLabel("\(title), \(session.status.accessibilityName)")
     }
 
+    /// A pasta acrescenta alguma coisa ao que o título já diz?
+    ///
+    /// Não acrescenta quando são a mesma palavra, que é o caso por omissão:
+    /// o título de uma sessão por renomear É o nome da pasta.
+    private var showsFolder: Bool {
+        title.caseInsensitiveCompare(session.projectName) != .orderedSame
+    }
+
+    private func elapsed(to date: Date) -> some View {
+        Text(SessionDurationFormatter.string(from: session.startedAt, to: date))
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(.white.opacity(0.45))
+            // Largura fixa: "3m" e "2h 8m" têm larguras diferentes, e sem uma
+            // coluna própria empurravam os ⌘N para posições diferentes em cada
+            // linha. Uma coluna de atalhos que dança não se lê como coluna.
+            .frame(width: 46, alignment: .trailing)
+    }
+
     private var mainRow: some View {
         HStack(spacing: 12) {
             AgentIconView(tool: session.tool)
@@ -1253,19 +1303,27 @@ private struct SessionRow: View {
                 // the project context here, followed by the pipeline step —
                 // which outranks the branch: convoy targets worktrees whose
                 // directory name already carries it — or the git branch.
+                //
+                // A pasta só aparece quando acrescenta alguma coisa. Sem esta
+                // condição, o caso mais comum — o título ser o nome da pasta —
+                // dava duas linhas a dizer a mesma palavra: "atalaia" e, por
+                // baixo, "atalaia". Uma linha inteira por linha, a não informar
+                // nada, em todas as sessões que nunca foram renomeadas.
                 HStack(spacing: 3) {
-                    Image(systemName: "folder")
-                        .font(.system(size: 9, weight: .semibold))
-                    Text(SessionTitleFormatter.truncate(session.projectName, to: 30))
-                        .font(.system(size: 11, design: .monospaced))
+                    if showsFolder {
+                        Image(systemName: "folder")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text(SessionTitleFormatter.truncate(session.projectName, to: 30))
+                            .font(.system(size: 11, design: .monospaced))
+                    }
                     if let currentStep = session.currentStep {
-                        Text("·")
+                        if showsFolder { Text("·") }
                         Image(systemName: "point.3.filled.connected.trianglepath.dotted")
                             .font(.system(size: 9, weight: .semibold))
                         Text(currentStep)
                             .font(.system(size: 11, design: .monospaced))
                     } else if let branch = branchName {
-                        Text("·")
+                        if showsFolder { Text("·") }
                         Image(systemName: "arrow.triangle.branch")
                             .font(.system(size: 9, weight: .semibold))
                         Text(branch)
@@ -1295,11 +1353,12 @@ private struct SessionRow: View {
             }
             // The system wakes this view on minute boundaries while the
             // row is on screen — no timers, no polling while collapsed.
-            TimelineView(.everyMinute) { context in
-                Text(SessionDurationFormatter.string(from: session.startedAt, to: context.date))
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(.white.opacity(0.45))
+            Group {
+                if isStaticRender {
+                    elapsed(to: Date())
+                } else {
+                    TimelineView(.everyMinute) { context in elapsed(to: context.date) }
+                }
             }
         }
         .padding(.leading, SessionMenuLayout.sessionRowLeadingInset)
@@ -1571,11 +1630,10 @@ private final class RightClickForwardingView: NSView {
 ///  - **O vidro.** O backdrop é alimentado pelo servidor de janelas e sai em
 ///    branco. Serve para geometria — alinhamento, medidas, tipos, o que cabe e
 ///    o que transborda — e não para julgar material.
-///  - **As linhas de sessão.** Cada uma tem um `TimelineView` a contar o tempo
-///    decorrido, e um `TimelineView` fora de ecrã não tem relógio a que se
-///    agarrar: o `ImageRenderer` devolve o retângulo amarelo de vista inválida.
-///    Tentar retratá-las daqui dava uma imagem que parecia um resultado e não
-///    era; a lista continua a precisar do ecrã desbloqueado.
+///  - **O movimento.** O mascote e o tempo decorrido saem parados: quem
+///    depende do relógio pergunta por `isStaticRender` e desenha um instante
+///    fixo, porque um `TimelineView` sem ecrã devolve vista inválida e levava
+///    a barra inteira com ele.
 ///
 ///     kill -USR2 $(pgrep -x Atalaia)
 ///
@@ -1595,7 +1653,7 @@ enum UIRender {
                 .background(Color(white: 0.10))
                 .padding(16)
                 .background(Color(white: 0.42))
-            let renderer = ImageRenderer(content: framed)
+            let renderer = ImageRenderer(content: framed.environment(\.isStaticRender, true))
             renderer.scale = 2
             guard let image = renderer.nsImage,
                   let tiff = image.tiffRepresentation,
@@ -1606,6 +1664,24 @@ enum UIRender {
             try? png.write(to: URL(fileURLWithPath: path))
             written.append(name)
         }
+
+        // As linhas, desenhadas fora da `ScrollView` que as embrulha na app: o
+        // `ImageRenderer` não desenha conteúdo de scroll views, e é a geometria
+        // das linhas que interessa auditar, não a da moldura que as faz rolar.
+        render(
+            VStack(spacing: 0) {
+                ForEach(Array(fixtures.enumerated()), id: \.element.id) { index, session in
+                    SessionRow(
+                        session: session, title: session.projectName, renamePrefill: "",
+                        isActionsExpanded: false, isSelected: index == 1,
+                        shortcutDigit: index + 1, toggleActions: {}, focus: { _ in },
+                        rename: { _, _ in }, kill: { _ in }, setKeyboardFocus: { _ in },
+                        branchCoordinator: GitBranchResolutionCoordinator()
+                    )
+                }
+            },
+            width: 760, name: "list"
+        )
 
         render(
             SessionMenuCard(

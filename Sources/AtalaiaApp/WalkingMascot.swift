@@ -24,6 +24,10 @@ struct WalkingMascot: View {
     var cell: CGFloat = 2.2
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Num retrato para ficheiro não há relógio: o `TimelineView` devolveria
+    /// vista inválida e levaria a barra inteira com ele. Fica parado, que é o
+    /// mesmo caminho que já servia quem pede menos movimento.
+    @Environment(\.isStaticRender) private var isStaticRender
 
     /// Um passo completo por 0,16 s — o suficiente para ler como passada e não
     /// como tremor.
@@ -32,7 +36,7 @@ struct WalkingMascot: View {
     private static let crossing: TimeInterval = 2.6
 
     var body: some View {
-        if reduceMotion {
+        if reduceMotion || isStaticRender {
             sprite(frame: 0)
                 .frame(width: runway, alignment: .center)
         } else {
