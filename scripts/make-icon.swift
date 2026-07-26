@@ -27,6 +27,10 @@ let vWidth  = CommandLine.arguments.count > 2 ? CGFloat(Double(CommandLine.argum
 let vDepth  = CommandLine.arguments.count > 3 ? CGFloat(Double(CommandLine.arguments[3])!) : 192
 let vInset  = CommandLine.arguments.count > 4 ? CGFloat(Double(CommandLine.arguments[4])!) : 0
 let vStyle  = CommandLine.arguments.count > 5 ? Int(CommandLine.arguments[5])! : 10
+/// Variante para o macOS 26: "default" desenha o quadro completo; "tinted"
+/// desenha SÓ o glifo, branco sobre transparente — o sistema encarrega-se do
+/// fundo e da cor. Um ícone tinted com fundo próprio sai um quadrado morto.
+let vVariant = CommandLine.arguments.count > 7 ? CommandLine.arguments[7] : "default"
 
 // MARK: - Forma
 
@@ -99,6 +103,7 @@ func hangingPanel(
 /// a ser encolhido, há proporções aplicadas à escala pedida.
 func drawIcon(px: Int) -> CGImage {
     let side = CGFloat(px)
+    let glyphOnly = vVariant == "tinted"
     // Abaixo disto o detalhe fino deixa de ter pixels onde assentar: a seteira
     // fecha, o bloom espalha-se e o rim light some-se numa linha cinzenta.
     let detailed = px >= 64
@@ -119,8 +124,10 @@ func drawIcon(px: Int) -> CGImage {
 
     // -- corpo ------------------------------------------------------------
     context.saveGState()
-    context.addPath(shape)
-    context.clip()
+    if !glyphOnly {
+        context.addPath(shape)
+        context.clip()
+    }
 
     let backdrop = CGGradient(
         colorsSpace: colorSpace,
@@ -130,11 +137,13 @@ func drawIcon(px: Int) -> CGImage {
         ] as CFArray,
         locations: [0, 1]
     )!
-    context.drawLinearGradient(
-        backdrop,
-        start: CGPoint(x: 0, y: body.maxY), end: CGPoint(x: 0, y: body.minY),
-        options: []
-    )
+    if !glyphOnly {
+        context.drawLinearGradient(
+            backdrop,
+            start: CGPoint(x: 0, y: body.maxY), end: CGPoint(x: 0, y: body.minY),
+            options: []
+        )
+    }
 
     // ---- P de onda ---------------------------------------------------------
     if vStyle == 10 {
@@ -163,7 +172,7 @@ func drawIcon(px: Int) -> CGImage {
         let amplitude = detailed ? body.width * 0.021 : 0
         let cycles: CGFloat = 1.15
 
-        if detailed {
+        if detailed && !glyphOnly {
             let halo = CGGradient(colorsSpace: colorSpace, colors: [
                 CGColor(red: 1, green: 1, blue: 1, alpha: 0.12),
                 CGColor(red: 1, green: 1, blue: 1, alpha: 0),
@@ -209,7 +218,7 @@ func drawIcon(px: Int) -> CGImage {
         // Branco chapado em miniatura. O gradiente dá volume a 256 e a 16
         // rouba contraste: o fundo do P sai cinzento-médio contra um corpo
         // quase preto, e a letra perde a aresta que a torna legível.
-        let ink = detailed
+        let ink = (detailed && !glyphOnly)
             ? CGGradient(colorsSpace: colorSpace, colors: [
                 CGColor(red: 1, green: 1, blue: 1, alpha: 0.98),
                 CGColor(red: 0.86, green: 0.86, blue: 0.90, alpha: 1),
@@ -228,7 +237,7 @@ func drawIcon(px: Int) -> CGImage {
             context.restoreGState()
         }
 
-        if detailed {
+        if detailed && !glyphOnly {
             var seed: UInt64 = 0x9E3779B97F4A7C15
             context.setBlendMode(.plusLighter)
             let grainSize = max(1, side / 180)

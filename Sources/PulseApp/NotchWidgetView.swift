@@ -58,6 +58,23 @@ final class NotchPointerTracker: ObservableObject {
     }
 }
 
+/// Cursor de mão sobre o que é clicável.
+///
+/// Numa janela sem cromado nenhum, o cursor é o único aviso de que uma coisa
+/// aceita clique antes de se carregar nela — os botões daqui não têm o
+/// desenho de botão do sistema que normalmente faz esse trabalho.
+private struct LinkCursor: ViewModifier {
+    func body(content: Content) -> some View {
+        content.onHover { inside in
+            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+}
+
+extension View {
+    func linkCursor() -> some View { modifier(LinkCursor()) }
+}
+
 /// A spring das superfícies interiores do painel (linhas a abrir, scroll até
 /// à seleção). A da expansão do painel (0,32/0,86) fica própria: é a única
 /// animação que muda a silhueta inteira, e um nadinha mais lenta de propósito.
@@ -262,7 +279,8 @@ struct NotchWidgetView: View {
                                 } else {
                                     settleAfterDetachedInteraction()
                                 }
-                            }
+                            },
+                            toggleHistory: toggleHistory
                         )
                         .frame(width: menuContentWidth)
                         .frame(width: menuWidth, alignment: .center)
@@ -1036,6 +1054,8 @@ private struct SessionMenuCard: View {
     /// que sim mesmo com o painel aberto pelo rato, que nunca é key.
     let keyboardActive: Bool
     let onRowInteractionChange: (Bool) -> Void
+    /// A tecla H entrega aqui; quem sabe trocar de vista é a vista-mãe.
+    var toggleHistory: () -> Void = {}
     @State private var errorMessage: String?
     // At most one row shows its inline actions; opening another closes it.
     @State private var actionsSessionID: String?
@@ -1138,6 +1158,9 @@ private struct SessionMenuCard: View {
         .onKeyPress(.downArrow) { move(1); return .handled }
         .onKeyPress(.return) { activateSelection(); return .handled }
         .onKeyPress(.escape) { dismiss(); return .handled }
+        // H de histórico. Só aqui, com a lista focada: fora do foco de teclado
+        // uma letra solta a mudar vistas seria uma armadilha para quem escreve.
+        .onKeyPress(KeyEquivalent("h")) { toggleHistory(); return .handled }
         // ⌘1..9 salta direto, sem contar setas. Acima de nove sessões deixa de
         // haver dígito, e a essa altura as setas são mais rápidas de qualquer
         // maneira.
@@ -1774,6 +1797,7 @@ private struct HeaderIconButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .linkCursor()
         .onHover { isHovered = $0 }
         .accessibilityLabel(accessibilityLabel)
     }
@@ -1823,6 +1847,7 @@ struct ActionListRow: View {
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
+        .linkCursor()
         .onHover { isHovered = $0 }
     }
 

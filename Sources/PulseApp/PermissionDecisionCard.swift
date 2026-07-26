@@ -377,6 +377,7 @@ struct PermissionDecisionCard: View {
                                 .foregroundStyle(.white.opacity(0.45))
                         }
                         .buttonStyle(.plain)
+                        .linkCursor()
                         .help("Writes a permission rule. This one does not expire.")
 
                         Text("·")
@@ -393,6 +394,7 @@ struct PermissionDecisionCard: View {
                             .foregroundStyle(.white.opacity(0.45))
                     }
                     .buttonStyle(.plain)
+                    .linkCursor()
                     .help("Leave it to the agent's own prompt and jump to that pane")
                 }
             }
@@ -489,6 +491,7 @@ private struct DecisionButton: View {
         // decide se um comando corre ou não, ver o clique registar-se é o que
         // separa "carreguei" de "acho que carreguei".
         .buttonStyle(PressableButtonStyle())
+        .linkCursor()
         .onHover { isHovering = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovering)
     }
