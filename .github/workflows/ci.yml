@@ -19,18 +19,18 @@ jobs:
       - name: Build
         run: swift build
       - name: Test
-        run: swift run atalaia-tests
+        run: swift run pulse-tests
       - name: Test OpenCode plugin
-        run: node Tests/OpenCodePlugin/atalaia_test.mjs
+        run: node Tests/OpenCodePlugin/pulse_test.mjs
       - name: Validate resources
         run: |
           plutil -lint config/Info.plist
-          for script in scripts/*.sh Sources/AtalaiaCore/Resources/hooks/*.sh; do /bin/sh -n "$script"; done
-          node --input-type=module --check < Sources/AtalaiaCore/Resources/opencode/atalaia.js
+          for script in scripts/*.sh Sources/PulseCore/Resources/hooks/*.sh; do /bin/sh -n "$script"; done
+          node --input-type=module --check < Sources/PulseCore/Resources/opencode/pulse.js
       - name: Package local app
         run: ./scripts/build-app.sh
       - name: Verify bundle
         run: |
-          codesign --verify --deep --strict .build/Atalaia.app
-          test -x .build/Atalaia.app/Contents/MacOS/Atalaia
-          test -x .build/Atalaia.app/Contents/Resources/bin/atalaia
+          codesign --verify --deep --strict .build/Pulse.app
+          test -x .build/Pulse.app/Contents/MacOS/Pulse
+          test -x .build/Pulse.app/Contents/Resources/bin/pulse

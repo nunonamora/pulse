@@ -1,34 +1,34 @@
 #!/bin/sh
-# One-command install (and reinstall) for Atalaia.
+# One-command install (and reinstall) for Pulse.
 #
 #   ./scripts/install.sh
 #
 # Builds the app, replaces any previous copy in /Applications, wires the
 # agent hooks, relaunches the app, and verifies the result with
-# `atalaia doctor`. Safe to re-run at any time.
+# `pulse doctor`. Safe to re-run at any time.
 set -eu
 
 cd "$(dirname "$0")/.."
 
 step() { /usr/bin/printf '\n==> %s\n' "$1"; }
 
-step "Building Atalaia (release)"
+step "Building Pulse (release)"
 ./scripts/build-app.sh
 
-app_destination="/Applications/Atalaia.app"
+app_destination="/Applications/Pulse.app"
 if [ ! -w "/Applications" ]; then
-    app_destination="$HOME/Applications/Atalaia.app"
+    app_destination="$HOME/Applications/Pulse.app"
     /bin/mkdir -p "$HOME/Applications"
 fi
 
 step "Stopping the running instance (if any)"
-if /usr/bin/pgrep -x Atalaia >/dev/null 2>&1; then
-    /usr/bin/pkill -x Atalaia
+if /usr/bin/pgrep -x Pulse >/dev/null 2>&1; then
+    /usr/bin/pkill -x Pulse
     attempts=0
-    while /usr/bin/pgrep -x Atalaia >/dev/null 2>&1; do
+    while /usr/bin/pgrep -x Pulse >/dev/null 2>&1; do
         attempts=$((attempts + 1))
         if [ "$attempts" -ge 20 ]; then
-            /usr/bin/printf 'error: Atalaia did not exit; close it and re-run.\n' >&2
+            /usr/bin/printf 'error: Pulse did not exit; close it and re-run.\n' >&2
             exit 1
         fi
         /bin/sleep 0.25
@@ -40,26 +40,26 @@ fi
 
 step "Installing app to $app_destination"
 /bin/rm -rf "$app_destination"
-/usr/bin/ditto .build/Atalaia.app "$app_destination"
+/usr/bin/ditto .build/Pulse.app "$app_destination"
 
 step "Wiring agent hooks (Claude Code / OpenCode / Codex / Pi)"
-"$app_destination/Contents/Resources/bin/atalaia" install
+"$app_destination/Contents/Resources/bin/pulse" install
 
-step "Launching Atalaia"
+step "Launching Pulse"
 /usr/bin/open "$app_destination"
 attempts=0
-until /usr/bin/pgrep -x Atalaia >/dev/null 2>&1; do
+until /usr/bin/pgrep -x Pulse >/dev/null 2>&1; do
     attempts=$((attempts + 1))
     if [ "$attempts" -ge 20 ]; then
-        /usr/bin/printf 'error: Atalaia did not appear after launch.\n' >&2
+        /usr/bin/printf 'error: Pulse did not appear after launch.\n' >&2
         exit 1
     fi
     /bin/sleep 0.25
 done
-/usr/bin/printf '✓ app running (pid %s)\n' "$(/usr/bin/pgrep -x Atalaia)"
+/usr/bin/printf '✓ app running (pid %s)\n' "$(/usr/bin/pgrep -x Pulse)"
 
-step "Verifying installation (atalaia doctor)"
-"$app_destination/Contents/Resources/bin/atalaia" doctor
+step "Verifying installation (pulse doctor)"
+"$app_destination/Contents/Resources/bin/pulse" doctor
 
 /usr/bin/printf '\nAll good. Agents already running must be restarted to pick up the hooks.\n'
 /usr/bin/printf 'OpenCode loads plugins in its background service: also run\n'

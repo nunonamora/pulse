@@ -2,17 +2,17 @@
 
 ## Scope
 
-Atalaia is a native macOS 14+ Swift package with three targets: the notch app, the `atalaia` integration CLI, and a dependency-free behavioral test runner.
+Pulse is a native macOS 14+ Swift package with three targets: the notch app, the `pulse` integration CLI, and a dependency-free behavioral test runner.
 
 ## Commands
 
 ```bash
 swift build
-swift run atalaia-tests
+swift run pulse-tests
 ./scripts/build-app.sh
 ```
 
-Run all three before proposing a pull request. The app bundle is written to `.build/Atalaia.app` and must never be committed.
+Run all three before proposing a pull request. The app bundle is written to `.build/Pulse.app` and must never be committed.
 
 ## Engineering rules
 
@@ -21,10 +21,10 @@ Run all three before proposing a pull request. The app bundle is written to `.bu
 - Treat process metadata, hook payloads, rollout files, state files, filesystem paths, and terminal identifiers as untrusted input.
 - Use absolute executable paths or a fixed allowlist. Never execute strings through a shell.
 - Preserve user-owned configuration. Installation must fail rather than overwrite an unknown integration file.
-- State belongs in `~/.atalaia/state`, with directory mode `0700` and file mode `0600`.
+- State belongs in `~/.pulse/state`, with directory mode `0700` and file mode `0600`.
 - Never commit credentials, signing certificates, provisioning profiles, notarization passwords, `.env` files, generated apps, or local session data.
-- Keep source under `Sources/` and behavioral tests under `Tests/AtalaiaCoreTests/`.
+- Keep source under `Sources/` and behavioral tests under `Tests/PulseCoreTests/`.
 
 ## Public interfaces
 
-`AtalaiaCore` is an internal module shared by the app and CLI, not a supported library product. Changes to the state schema or installed integration format require explicit documentation and tests.
+`PulseCore` is an internal module shared by the app and CLI, not a supported library product. Changes to the state schema or installed integration format require explicit documentation and tests.

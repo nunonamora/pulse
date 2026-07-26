@@ -1,9 +1,9 @@
-# Atalaia
+# Pulse
 
 Os teus agentes de código vigiados no notch do Mac — **com voz em português** e
 **decisões de permissão sem sair do editor**.
 
-Atalaia é a torre de vigia em ponto alto: quem lá está observa e dá o alerta. É
+Pulse é a torre de vigia em ponto alto: quem lá está observa e dá o alerta. É
 o que esta app faz, no sítio mais alto do ecrã.
 
 > Derivado do [AgentGlance](https://github.com/Inakitajes/AgentGlance) de Josemi
@@ -94,9 +94,9 @@ O `PermissionBroker` acrescenta esse canal seguindo o precedente do
 pertence à integração:
 
 ```
-o hook escreve   ~/.atalaia/state/decisions/<id>.request.json
+o hook escreve   ~/.pulse/state/decisions/<id>.request.json
                  e bloqueia, a sondar
-a app responde   ~/.atalaia/state/decisions/<id>.reply.json
+a app responde   ~/.pulse/state/decisions/<id>.reply.json
 o hook imprime   {"hookSpecificOutput":{…,"decision":{"behavior":"allow"}}}
 ```
 

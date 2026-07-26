@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDisplayName</key>
-    <string>Atalaia</string>
+    <string>Pulse</string>
     <key>CFBundleExecutable</key>
-    <string>Atalaia</string>
+    <string>Pulse</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>com.atalaia.app</string>
+    <string>com.pulse.app</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Atalaia</string>
+    <string>Pulse</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -29,6 +29,6 @@
     <key>LSUIElement</key>
     <true/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Atalaia focuses the terminal tab or pane you select.</string>
+    <string>Pulse focuses the terminal tab or pane you select.</string>
 </dict>
 </plist>

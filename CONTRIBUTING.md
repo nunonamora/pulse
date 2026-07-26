@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Atalaia.
+Thanks for helping improve Pulse.
 
 ## Development setup
 
@@ -12,12 +12,12 @@ Requirements:
 - Ghostty 1.3+, iTerm2, or Terminal for manual focus testing.
 
 ```bash
-git clone https://github.com/ixjosemi/Atalaia.git
-cd Atalaia
+git clone https://github.com/ixjosemi/Pulse.git
+cd Pulse
 swift build
-swift run atalaia-tests
+swift run pulse-tests
 ./scripts/build-app.sh
-open .build/Atalaia.app
+open .build/Pulse.app
 ```
 
 ## Workflow

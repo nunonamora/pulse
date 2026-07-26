@@ -11,9 +11,9 @@
 #      which is stable forever.
 set -euo pipefail
 
-NAME="${1:-Atalaia Local Signing}"
-KC="${2:-$HOME/Library/Keychains/atalaia-signing.keychain-db}"
-KCPW="${KCPW:-atalaia}"
+NAME="${1:-Pulse Local Signing}"
+KC="${2:-$HOME/Library/Keychains/pulse-signing.keychain-db}"
+KCPW="${KCPW:-pulse}"
 TMP="$(mktemp -d)"
 
 security create-keychain -p "$KCPW" "$KC" 2>/dev/null || true

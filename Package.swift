@@ -4,25 +4,25 @@
 import PackageDescription
 
 let package = Package(
-    name: "Atalaia",
+    name: "Pulse",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "atalaia", targets: ["Atalaia"]),
-        .executable(name: "AtalaiaApp", targets: ["AtalaiaApp"]),
-        .executable(name: "atalaia-tests", targets: ["AtalaiaTests"]),
+        .executable(name: "pulse", targets: ["Pulse"]),
+        .executable(name: "PulseApp", targets: ["PulseApp"]),
+        .executable(name: "pulse-tests", targets: ["PulseTests"]),
     ],
     targets: [
         .target(
-            name: "AtalaiaCore",
+            name: "PulseCore",
             resources: [.copy("Resources")]
         ),
         .executableTarget(
-            name: "Atalaia",
-            dependencies: ["AtalaiaCore"]
+            name: "Pulse",
+            dependencies: ["PulseCore"]
         ),
         .executableTarget(
-            name: "AtalaiaApp",
-            dependencies: ["AtalaiaCore"],
+            name: "PulseApp",
+            dependencies: ["PulseCore"],
             // swift build does not compile Metal sources, so the shader ships
             // as a prebuilt default.metallib; regenerate it from Ripple.metal
             // with scripts/compile-shaders.sh after editing the source.
@@ -30,9 +30,9 @@ let package = Package(
             resources: [.copy("Resources/default.metallib")]
         ),
         .executableTarget(
-            name: "AtalaiaTests",
-            dependencies: ["AtalaiaCore"],
-            path: "Tests/AtalaiaCoreTests"
+            name: "PulseTests",
+            dependencies: ["PulseCore"],
+            path: "Tests/PulseCoreTests"
         ),
     ],
     swiftLanguageModes: [.v5]

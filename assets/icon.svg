@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Atalaia — a marca.
+  Pulse — a marca.
 
   O recorte no topo, e o olhar que desce dele. A app vive pendurada na berma
   de cima do ecrã e vigia o que se passa por baixo; a marca é esse gesto, não
@@ -20,11 +20,11 @@
 
   Versões anteriores, e porque morreram: três arcos concêntricos (o terceiro
   desaparecia a 16 px); dois arcos com um ponto de luz (lia-se como cara
-  triste); uma criatura em coral (dizia "Claude", não "Atalaia"); uma torre com
+  triste); uma criatura em coral (dizia "Claude", não "Pulse"); uma torre com
   merlões e seteira (lia-se como torre de xadrez, e o topo empastava a 16 px).
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024"
-     role="img" aria-label="Atalaia">
+     role="img" aria-label="Pulse">
   <defs>
     <linearGradient id="fundo" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#1E1E22"/>
@@ -47,7 +47,7 @@
   <g clip-path="url(#moldura)">
     <!-- O olhar: uma cunha que abre para baixo, a partir do recorte. Sai da
          moldura em baixo de propósito — um cone que acabasse dentro do quadro
-         fechava a ideia, e a atalaia olha para lá do que se vê. -->
+         fechava a ideia, e a pulse olha para lá do que se vê. -->
     <path d="M428 268 L596 268 L742 1000 L282 1000 Z" fill="url(#olhar)"/>
 
     <!-- O recorte, encostado ao topo: topo reto, cantos de baixo redondos.

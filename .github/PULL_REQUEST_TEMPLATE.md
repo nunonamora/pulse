@@ -3,7 +3,7 @@
 ## Verification
 
 - [ ] `swift build`
-- [ ] `swift run atalaia-tests`
+- [ ] `swift run pulse-tests`
 - [ ] `./scripts/build-app.sh`
 
 ## Security and privacy

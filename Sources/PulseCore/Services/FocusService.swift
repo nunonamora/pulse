@@ -1,0 +1,364 @@
+import Foundation
+import Darwin
+
+public enum FocusAction: Equatable, Sendable {
+    case run(executable: String, arguments: [String])
+    case appleScript(String)
+    /// Último recurso: trazer à frente a aplicação dona deste processo.
+    ///
+    /// Não acerta no separador, mas põe-te à frente da janela certa — o que é
+    /// muito melhor do que a linha vermelha que aparecia antes para qualquer
+    /// terminal que não fosse Ghostty, iTerm2 ou Terminal.app.
+    case activate(pid: Int32)
+}
+
+public enum FocusError: Error, Equatable, Sendable {
+    case invalidTmuxPane(String)
+    case missingTerminalTarget
+    case sessionUnavailable
+    case commandFailed(String, Int32)
+}
+
+public enum FocusPlanner {
+    public static func actions(for session: AgentSession) throws -> [FocusAction] {
+        var actions: [FocusAction] = []
+        if let pane = session.terminal.tmuxPane {
+            guard pane.range(of: #"^%[0-9]+$"#, options: .regularExpression) != nil else {
+                throw FocusError.invalidTmuxPane(pane)
+            }
+            actions.append(.run(executable: "tmux", arguments: ["select-window", "-t", pane]))
+            actions.append(.run(executable: "tmux", arguments: ["select-pane", "-t", pane]))
+        }
+        do {
+            actions.append(try terminalAction(for: session))
+        } catch {
+            // Sem alvo preciso, fazemos o que der. Falhar por inteiro só
+            // porque não se sabe o separador é desperdiçar o que se sabe.
+            guard let fallback = fallbackAction(for: session) else { throw error }
+            actions.append(fallback)
+        }
+        return actions
+    }
+
+    /// Acertar no painel exato do cmux, e não só na aplicação.
+    ///
+    /// O cmux embute o Ghostty e anuncia-se `TERM_PROGRAM=ghostty`. Enquanto
+    /// isto não existiu, o planeador escolhia o ramo do Ghostty, falava com a
+    /// aplicação Ghostty — que não tem janela nenhuma — e caía no recurso
+    /// genérico: trazia o cmux à frente e deixava-te no separador onde já
+    /// estavas. Clicar numa sessão não te levava a lado nenhum.
+    ///
+    /// `CMUX_SURFACE_ID` é o `id` do terminal no dicionário de scripting, e
+    /// `focus` sobre ele seleciona o separador E o split. Isto importa: dois
+    /// splits do mesmo repositório têm a mesma `working directory`, e era por
+    /// ela que a versão anterior procurava — acertava no separador certo por
+    /// sorte e no split errado por sistema.
+    static func cmuxAction(for session: AgentSession) -> FocusAction? {
+        if let surface = session.terminal.cmuxSurfaceID, !surface.isEmpty {
+            return .appleScript(cmuxScript(
+                surfaceID: surface,
+                tabID: session.terminal.cmuxTabID
+            ))
+        }
+        // Sessões registadas antes de os ids existirem só têm a diretoria.
+        // Vale mais acertar no separador certo do que em nenhum.
+        guard !session.cwd.isEmpty else { return nil }
+        let cwd = appleScriptString(session.cwd)
+        return .appleScript("""
+        tell application "cmux"
+          set matches to every terminal whose working directory is "\(cwd)"
+          if (count of matches) is 0 then error "Pulse could not find a cmux terminal for this directory"
+          focus (item 1 of matches)
+          activate
+        end tell
+        """)
+    }
+
+    /// Pelo painel; se ele já não existir, pelo separador que o continha.
+    ///
+    /// Um split fechado não é razão para não ir a lado nenhum: o separador
+    /// ainda é o sítio certo, e `focus` do seu terminal em foco leva-te lá.
+    private static func cmuxScript(surfaceID: String, tabID: String?) -> String {
+        let surface = appleScriptString(surfaceID)
+        let tabBranch = tabID.map { id in
+            """
+
+              repeat with w in windows
+                repeat with t in tabs of w
+                  if (id of t) is "\(appleScriptString(id))" then
+                    focus (focused terminal of t)
+                    activate
+                    return
+                  end if
+                end repeat
+              end repeat
+            """
+        } ?? ""
+        return """
+        tell application "cmux"
+          set matches to every terminal whose id is "\(surface)"
+          if (count of matches) is 1 then
+            focus (item 1 of matches)
+            activate
+            return
+          end if\(tabBranch)
+          error "Pulse could not find this cmux terminal"
+        end tell
+        """
+    }
+
+    static func fallbackAction(for session: AgentSession) -> FocusAction? {
+        if let tty = session.terminal.tty,
+           let pid = TerminalOwner.applicationPID(forTTY: tty) {
+            return .activate(pid: pid)
+        }
+        if session.pid > 0, let pid = TerminalOwner.applicationPID(ofDescendant: session.pid) {
+            return .activate(pid: pid)
+        }
+        return nil
+    }
+
+    private static func terminalAction(for session: AgentSession) throws -> FocusAction {
+        // Antes do Ghostty, de propósito: uma sessão do cmux diz-se Ghostty, e
+        // testar o Ghostty primeiro mandava-a sempre pelo caminho errado.
+        if session.terminal.cmuxSurfaceID?.isEmpty == false,
+           let action = cmuxAction(for: session) {
+            return action
+        }
+        if session.terminal.termProgram?.lowercased() == "ghostty" {
+            return .appleScript(ghosttyScript(for: session))
+        }
+        if let identifier = session.terminal.itermSessionID {
+            let normalizedIdentifier = normalizedITermIdentifier(identifier)
+            if !normalizedIdentifier.isEmpty {
+                return .appleScript(iTermScript(
+                    identifier: normalizedIdentifier,
+                    tty: session.terminal.tty
+                ))
+            }
+            if let tty = session.terminal.tty {
+                return .appleScript(iTermScript(identifier: nil, tty: tty))
+            }
+            throw FocusError.missingTerminalTarget
+        }
+        if session.terminal.termProgram == "iTerm.app",
+           let tty = session.terminal.tty {
+            return .appleScript(iTermScript(identifier: nil, tty: tty))
+        }
+        if let tty = session.terminal.tty,
+           session.terminal.termProgram == "Apple_Terminal" {
+            return .appleScript(terminalScript(tty: tty))
+        }
+        throw FocusError.missingTerminalTarget
+    }
+
+    private static func ghosttyScript(for session: AgentSession) -> String {
+        let cwd = appleScriptString(session.cwd)
+        let hint = appleScriptString(session.terminal.windowTitleHint ?? session.projectName)
+        let identifier = session.terminal.ghosttyTerminalID.map(appleScriptString)
+        if let identifier {
+            // A surface ID is strong identity. If it disappeared, choosing a
+            // different same-project tab would be worse than reporting that
+            // the target is stale.
+            return """
+            tell application "Ghostty"
+              set matches to every terminal whose id is "\(identifier)"
+              if (count of matches) is not 1 then error "Pulse could not uniquely identify the Ghostty terminal"
+              focus item 1 of matches
+              activate
+            end tell
+            """
+        }
+        // Ghostty 1.3 exposes surface ID, title, and working directory but not
+        // TTY/PID. Newer versions let the scanner use those fields to obtain
+        // an exact ID; focus itself remains compatible with 1.3.
+        return """
+        tell application "Ghostty"
+          set matches to every terminal whose working directory is "\(cwd)"
+          if (count of matches) is not 1 then
+            set titleMatches to every terminal whose name contains "\(hint)"
+            if (count of titleMatches) is 1 then set matches to titleMatches
+          end if
+          if (count of matches) is not 1 then error "Pulse could not uniquely identify the Ghostty terminal"
+          focus item 1 of matches
+          activate
+        end tell
+        """
+    }
+
+    private static func iTermScript(identifier: String?, tty: String?) -> String {
+        let predicate: String
+        if let identifier, !identifier.isEmpty {
+            predicate = "unique ID of aSession is \"\(appleScriptString(identifier))\""
+        } else if let tty {
+            predicate = "tty of aSession is \"\(appleScriptString(tty))\""
+        } else {
+            // terminalAction never plans this form, but keep generation
+            // fail-closed if a future caller violates that invariant.
+            predicate = "false"
+        }
+        return """
+        tell application "iTerm2"
+          set matchCount to 0
+          set targetWindow to missing value
+          set targetTab to missing value
+          set targetSession to missing value
+          repeat with aWindow in windows
+            repeat with aTab in tabs of aWindow
+              repeat with aSession in sessions of aTab
+                if \(predicate) then
+                  set matchCount to matchCount + 1
+                  set targetWindow to aWindow
+                  set targetTab to aTab
+                  set targetSession to aSession
+                end if
+              end repeat
+            end repeat
+          end repeat
+          if matchCount is not 1 then error "Pulse could not uniquely identify the iTerm session"
+          select targetSession
+          select targetTab
+          select targetWindow
+          activate
+        end tell
+        """
+    }
+
+    private static func terminalScript(tty: String) -> String {
+        let normalizedTTY = tty.hasPrefix("/dev/") ? tty : "/dev/\(tty)"
+        let value = appleScriptString(normalizedTTY)
+        return """
+        tell application "Terminal"
+          set matchCount to 0
+          set targetWindow to missing value
+          set targetTab to missing value
+          repeat with aWindow in windows
+            repeat with aTab in tabs of aWindow
+              if (tty of aTab) is "\(value)" then
+                set matchCount to matchCount + 1
+                set targetWindow to aWindow
+                set targetTab to aTab
+              end if
+            end repeat
+          end repeat
+          if matchCount is not 1 then error "Pulse could not uniquely identify the Terminal tab"
+          set selected tab of targetWindow to targetTab
+          set frontmost of targetWindow to true
+          activate
+        end tell
+        """
+    }
+
+    private static func normalizedITermIdentifier(_ identifier: String) -> String {
+        identifier.split(separator: ":", omittingEmptySubsequences: false).last.map(String.init)
+            ?? identifier
+    }
+
+    static func appleScriptString(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: " ")
+    }
+}
+
+public enum FocusService {
+    /// Foca a sessão, com recurso a trazer a aplicação à frente.
+    ///
+    /// O recurso tem de cobrir os dois momentos em que isto falha, e não só o
+    /// primeiro:
+    ///
+    /// 1. **A planear** — nenhum terminal conhecido, nenhum alvo. Já estava
+    ///    tratado.
+    /// 2. **A correr** — havia alvo mas ele não existe. É o caso de uma sessão
+    ///    que anuncia `TERM_PROGRAM=ghostty` mas vive dentro de outra app: o
+    ///    plano sai limpo, o AppleScript corre, não encontra janela nenhuma, e
+    ///    a app respondia com a linha vermelha. Era aqui que ficava.
+    public static func focus(_ session: AgentSession) throws {
+        do {
+            try FocusActionRunner.run(FocusPlanner.actions(for: session))
+            return
+        } catch {
+            // Escada de recursos, do mais preciso ao mais grosseiro. Só se
+            // desce quando o degrau acima falha mesmo.
+            if let cmux = FocusPlanner.cmuxAction(for: session),
+               (try? FocusActionRunner.run([cmux])) != nil {
+                return
+            }
+            guard let fallback = FocusPlanner.fallbackAction(for: session) else { throw error }
+            try FocusActionRunner.run([fallback])
+        }
+    }
+}
+
+/// Executes planned terminal actions — subprocess or AppleScript — for both
+/// focusing and terminating sessions. Every action runs even after an
+/// earlier one fails, so a dead tmux binding never blocks the terminal
+/// action behind it; the first failure is still reported.
+enum FocusActionRunner {
+    static func run(_ actions: [FocusAction]) throws {
+        var firstError: Error?
+        for action in actions {
+            let process = Process()
+            switch action {
+            case let .run(executable, arguments):
+                process.executableURL = try executableURL(named: executable)
+                process.arguments = arguments
+            case let .appleScript(script):
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+                process.arguments = ["-e", script]
+            case let .activate(pid):
+                // `open -a` pelo caminho do executável é o caminho que não
+                // depende do AppKit — isto também corre a partir do CLI, onde
+                // não há NSRunningApplication.
+                guard let path = TerminalOwner.executablePath(pid),
+                      let app = path.range(of: ".app/Contents/MacOS/")
+                          .map({ String(path[path.startIndex..<$0.lowerBound]) + ".app" })
+                else {
+                    if firstError == nil { firstError = FocusError.missingTerminalTarget }
+                    continue
+                }
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                process.arguments = [app]
+            }
+            do {
+                try process.run()
+            } catch {
+                if firstError == nil { firstError = error }
+                continue
+            }
+            process.waitUntilExit()
+            if process.terminationStatus != 0 {
+                if firstError == nil {
+                    firstError = FocusError.commandFailed(
+                        process.executableURL?.path ?? "command",
+                        process.terminationStatus
+                    )
+                }
+            }
+        }
+        if let firstError { throw firstError }
+    }
+
+    private static func executableURL(named executable: String) throws -> URL {
+        if executable.hasPrefix("/") {
+            return URL(fileURLWithPath: executable)
+        }
+        let trustedDirectories = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+        for directory in trustedDirectories {
+            let candidate = URL(fileURLWithPath: directory)
+                .appendingPathComponent(executable)
+                .resolvingSymlinksInPath()
+            var metadata = stat()
+            guard Darwin.lstat(candidate.path, &metadata) == 0,
+                  metadata.st_mode & S_IFMT == S_IFREG,
+                  metadata.st_mode & 0o022 == 0,
+                  metadata.st_uid == 0 || metadata.st_uid == getuid(),
+                  FileManager.default.isExecutableFile(atPath: candidate.path) else {
+                continue
+            }
+            return candidate
+        }
+        throw CocoaError(.fileNoSuchFile)
+    }
+}

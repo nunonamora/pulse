@@ -1,4 +1,4 @@
-// Desenha o ícone da Atalaia, um tamanho de cada vez.
+// Desenha o ícone da Pulse, um tamanho de cada vez.
 //
 // Substituiu um SVG único rasterizado para todos os tamanhos. Três coisas que
 // um ficheiro estático não dá, e que separam um ícone bom de um ícone certo:
@@ -26,7 +26,7 @@ let outputDirectory = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory
 let vWidth  = CommandLine.arguments.count > 2 ? CGFloat(Double(CommandLine.arguments[2])!) : 240
 let vDepth  = CommandLine.arguments.count > 3 ? CGFloat(Double(CommandLine.arguments[3])!) : 192
 let vInset  = CommandLine.arguments.count > 4 ? CGFloat(Double(CommandLine.arguments[4])!) : 0
-let vStyle  = CommandLine.arguments.count > 5 ? Int(CommandLine.arguments[5])! : 9
+let vStyle  = CommandLine.arguments.count > 5 ? Int(CommandLine.arguments[5])! : 10
 
 // MARK: - Forma
 
@@ -112,7 +112,8 @@ func drawIcon(px: Int) -> CGImage {
     context.setAllowsAntialiasing(true)
 
     // A margem do sistema: a arte ocupa 824 de 1024.
-    let inset = side * 100 / 1024
+    let inset = side * (CommandLine.arguments.count > 6
+        ? CGFloat(Double(CommandLine.arguments[6])!) : 100) / 1024
     let body = CGRect(x: inset, y: inset, width: side - inset * 2, height: side - inset * 2)
     let shape = squircle(in: body)
 
@@ -134,6 +135,106 @@ func drawIcon(px: Int) -> CGImage {
         start: CGPoint(x: 0, y: body.maxY), end: CGPoint(x: 0, y: body.minY),
         options: []
     )
+
+    // ---- P de onda ---------------------------------------------------------
+    if vStyle == 10 {
+        // Um P feito de onda. A haste não é uma barra: é uma fita cuja linha
+        // central ondula, e o bojo é um anel cujo raio respira com o ângulo.
+        //
+        // A forma vem do nome. Uma pulsação é uma onda, e desenhar a letra COM
+        // a coisa que ela nomeia é o que separa um monograma de uma marca — a
+        // letra deixa de ser um rótulo colado por cima e passa a ser feita do
+        // assunto.
+        let cx = body.midX, cy = body.midY
+        let h = body.height * 0.62
+        let top = cy + h / 2, bottom = cy - h / 2
+        let thickness = body.width * 0.125
+        let stemX = cx - body.width * 0.185 + body.width * 0.045
+        let amplitude = body.width * 0.021
+        let cycles: CGFloat = 1.15
+
+        if detailed {
+            let halo = CGGradient(colorsSpace: colorSpace, colors: [
+                CGColor(red: 1, green: 1, blue: 1, alpha: 0.12),
+                CGColor(red: 1, green: 1, blue: 1, alpha: 0),
+            ] as CFArray, locations: [0, 1])!
+            context.drawRadialGradient(
+                halo, startCenter: CGPoint(x: cx, y: cy), startRadius: 0,
+                endCenter: CGPoint(x: cx, y: cy), endRadius: body.width * 0.52, options: []
+            )
+        }
+
+        // Um P normal, com a haste a ondular.
+        //
+        // A onda é tratamento, não deformação. Uma primeira versão fazia a
+        // espessura abrir e fechar com ela e dava-lhe amplitude a dobrar: o
+        // resultado lia-se como clave de sol, não como letra. A letra tem de
+        // continuar a ser uma letra — é a linha que ondula, o peso mantém-se.
+        func wave(_ t: CGFloat) -> CGFloat {
+            stemX + amplitude * sin(t * .pi * 2 * cycles)
+        }
+        let steps = 160
+        let spine = CGMutablePath()
+        for i in 0...steps {
+            let t = CGFloat(i) / CGFloat(steps)
+            let point = CGPoint(x: wave(t), y: top - h * t)
+            i == 0 ? spine.move(to: point) : spine.addLine(to: point)
+        }
+        // Traçado com pontas redondas em vez de bordos desenhados à mão: a
+        // versão anterior fechava a fita com um corte reto e as pontas saíam
+        // esfarrapadas em cima e em baixo.
+        let ribbon = spine.copy(strokingWithWidth: thickness, lineCap: .round,
+                                lineJoin: .round, miterLimit: 10)
+
+        // O bojo: um anel limpo, do mesmo peso, encostado ao alto da haste.
+        let bowlR = h * 0.235
+        let bowlCX = wave(0.10) + bowlR * 0.60
+        let bowlCY = top - bowlR * 0.98
+        let arc = CGMutablePath()
+        arc.addArc(center: CGPoint(x: bowlCX, y: bowlCY), radius: bowlR,
+                   startAngle: .pi * 0.62, endAngle: -.pi * 0.62, clockwise: true)
+        let ring = arc.copy(strokingWithWidth: thickness, lineCap: .round,
+                            lineJoin: .round, miterLimit: 10)
+
+        let ink = CGGradient(colorsSpace: colorSpace, colors: [
+            CGColor(red: 1, green: 1, blue: 1, alpha: 0.98),
+            CGColor(red: 0.86, green: 0.86, blue: 0.90, alpha: 1),
+            CGColor(red: 0.58, green: 0.58, blue: 0.63, alpha: 1),
+        ] as CFArray, locations: [0, 0.5, 1])!
+        for shape in [ring, ribbon] {
+            context.saveGState()
+            context.addPath(shape)
+            context.clip()
+            context.drawLinearGradient(ink, start: CGPoint(x: 0, y: top),
+                                       end: CGPoint(x: 0, y: bottom), options: [])
+            context.restoreGState()
+        }
+
+        if detailed {
+            var seed: UInt64 = 0x9E3779B97F4A7C15
+            context.setBlendMode(.plusLighter)
+            let grainSize = max(1, side / 180)
+            var gy = body.minY
+            while gy < body.maxY {
+                var gx = body.minX
+                while gx < body.maxX {
+                    seed = seed &* 6364136223846793005 &+ 1442695040888963407
+                    let n = CGFloat((seed >> 33) % 1000) / 1000
+                    if n > 0.58 {
+                        context.setFillColor(CGColor(red: 1, green: 1, blue: 1,
+                                                     alpha: (n - 0.58) * 0.06))
+                        context.fill(CGRect(x: gx, y: gy, width: grainSize, height: grainSize))
+                    }
+                    gx += grainSize
+                }
+                gy += grainSize
+            }
+            context.setBlendMode(.normal)
+        }
+
+        context.restoreGState()
+        return context.makeImage()!
+    }
 
     // ---- P abstrato, em vidro ---------------------------------------------
     if vStyle == 9 {
@@ -689,6 +790,13 @@ func drawIcon(px: Int) -> CGImage {
     // A luz vem de cima, por isso a aresta de cima acende e a de baixo não.
     // Uma linha igual em todo o contorno lê-se como traço desenhado; esta
     // lê-se como um objeto sob uma luz.
+    //
+    // Só acima de 64 px. A linha tem um mínimo de 1 px, e 1 px num ícone de 16
+    // pesa dezasseis vezes o que pesa num de 256: deixava de ser um reflexo na
+    // aresta e passava a ser uma moldura, com o ícone a ler-se como um botão
+    // selecionado. Verificado no ícone tal como o sistema o carrega do bundle,
+    // que é onde isto se via e no desenho isolado não.
+    guard detailed else { return context.makeImage()! }
     context.saveGState()
     context.addPath(shape)
     context.clip()
