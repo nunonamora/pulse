@@ -59,6 +59,10 @@ struct PermissionDecisionCard: View {
     /// conteúdo e usar o menor dos dois faz o cartão encolher para o que tem
     /// para dizer, e só rolar quando passa do teto.
     @State private var contentHeight: CGFloat = 0
+    /// O rato está sobre o poço do comando — mostra a ferramenta de copiar.
+    @State private var isHoveringPayload = false
+    /// Acabou de copiar: o ícone confirma durante um instante.
+    @State private var justCopied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -186,6 +190,42 @@ struct PermissionDecisionCard: View {
                         .strokeBorder(.white.opacity(0.06), lineWidth: 0.5)
                 )
         )
+        // Copiar o corpo sem decidir nada.
+        //
+        // Há um terceiro caminho entre permitir e negar: ir testar o comando à
+        // mão, ou inspecioná-lo com calma. Sem isto, esse caminho era
+        // selecionar o texto com o rato dentro de um poço que pode rolar — o
+        // gesto mais frágil da app inteira. O botão só aparece com o rato em
+        // cima do poço: é uma ferramenta de leitura, não uma quarta decisão.
+        .overlay(alignment: .topTrailing) {
+            if isHoveringPayload || justCopied {
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                    justCopied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                        justCopied = false
+                    }
+                } label: {
+                    Image(systemName: justCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(justCopied ? Color.green : .white.opacity(0.55))
+                        .padding(5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(.white.opacity(0.10))
+                        )
+                }
+                .buttonStyle(.plain)
+                .padding(5)
+                .transition(.opacity)
+                .help("Copy without deciding")
+                .accessibilityLabel(justCopied ? "Copied" : "Copy the command")
+            }
+        }
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) { isHoveringPayload = hovering }
+        }
     }
 
     private func payloadBody(_ text: String) -> some View {

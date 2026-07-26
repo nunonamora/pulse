@@ -1736,16 +1736,25 @@ enum UIRender {
             safeAreaTop: 38, leftNotchEdgeX: 790, rightNotchEdgeX: 1010,
             menuBarHeight: 39
         )
-        render(
-            NotchWidgetView(
-                store: store, layout: layout,
-                pointerTracker: NotchPointerTracker(),
-                requestPointerRefresh: {}, onInteractiveRegionChange: { _ in },
-                onKeyboardFocusChange: { _ in }, onMenuVisibilityChange: { _ in }
-            )
-            .frame(width: layout.width, height: layout.height),
-            width: layout.width, name: "bar"
+        // E a mesma barra num ecrã SEM recorte, que é a apresentação que
+        // nunca ninguém olhou: um monitor externo cai sempre nesta.
+        let pill = NotchLayout(
+            screenMinX: 0, screenWidth: 1800, screenMaxY: 1169,
+            safeAreaTop: 0, leftNotchEdgeX: nil, rightNotchEdgeX: nil,
+            menuBarHeight: 24
         )
+        for (name, geometry) in [("bar", layout), ("bar-pill", pill)] {
+            render(
+                NotchWidgetView(
+                    store: store, layout: geometry,
+                    pointerTracker: NotchPointerTracker(),
+                    requestPointerRefresh: {}, onInteractiveRegionChange: { _ in },
+                    onKeyboardFocusChange: { _ in }, onMenuVisibilityChange: { _ in }
+                )
+                .frame(width: geometry.width, height: geometry.height + geometry.topGap),
+                width: geometry.width, name: name
+            )
+        }
 
         return written.isEmpty ? "não desenhou nada" : "ok: \(written.joined(separator: ", "))"
     }
