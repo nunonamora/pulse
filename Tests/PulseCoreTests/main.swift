@@ -157,7 +157,20 @@ func testSavingSessionPublishesCanonicalStateFile() throws {
 
     try StateRepository(directoryURL: directory).save(session)
 
-    let names = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
+    // Só os ficheiros: o que este teste garante é a codificação do nome — um
+    // sessionID com "/" tem de virar base64url e não um caminho. O diretório
+    // "decisions" que aparece ao lado é o broker de permissões a ser
+    // pré-criado por prepareDirectory(), de propósito, para o primeiro pedido
+    // não ter de o criar com um agente bloqueado à espera.
+    let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        .filter { name in
+            var isDirectory: ObjCBool = false
+            FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent(name).path, isDirectory: &isDirectory
+            )
+            return !isDirectory.boolValue
+        }
+        .sorted()
     try expect(names, equals: ["claude-c2Vzc2lvbi91bnNhZmU.json"], "state file names")
 }
 
@@ -172,7 +185,17 @@ func testStateFilesArePrivateAndSessionNamesDoNotCollide() throws {
     try repository.save(first)
     try repository.save(second)
 
-    let names = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
+    // Como acima: só os ficheiros. O diretório 'decisions' do broker aparece
+    // ao lado por desenho e não é o que está em teste.
+    let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        .filter { name in
+            var isDirectory: ObjCBool = false
+            FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent(name).path, isDirectory: &isDirectory
+            )
+            return !isDirectory.boolValue
+        }
+        .sorted()
     try expect(names.count, equals: 2, "collision-resistant state file names")
     let directoryMode = try FileManager.default.attributesOfItem(atPath: directory.path)[.posixPermissions] as? NSNumber
     let fileMode = try FileManager.default.attributesOfItem(atPath: directory.appendingPathComponent(names[0]).path)[.posixPermissions] as? NSNumber
@@ -3492,15 +3515,34 @@ func testNotchLayoutAddsOnlyAMinimalFixedRightWing() throws {
         visibleIndicatorCount: 1,
         showsIdleMark: false
     )
-    try expect(notched.statusWingEdgePadding, equals: 8, "hardware-notch outer edge uses a small visual margin")
-    try expect(notched.leftStatusWingLeadingPadding, equals: 8, "left wing has a small outer margin")
+    // 17 = topShoulderRadius (14) + 3. O recuo exterior tem de limpar a curva
+    // do ombro: com os 8 pt antigos, o glifo de fora ficava DENTRO dela — meio
+    // ponto por cima do wallpaper em vez do preto. O teste guardava o valor
+    // antigo e chamava-lhe pequeno; o requisito verdadeiro é "maior do que o
+    // raio do ombro", e é isso que ele passa a afirmar.
+    try expect(
+        notched.statusWingEdgePadding,
+        equals: HangingNotchMetrics.topShoulderRadius + 3,
+        "hardware-notch outer edge clears the shoulder curve"
+    )
+    try expect(
+        notched.leftStatusWingLeadingPadding,
+        equals: HangingNotchMetrics.topShoulderRadius + 3,
+        "left wing clears the shoulder curve"
+    )
     try expect(notched.leftStatusWingTrailingPadding, equals: 12, "left wing leaves a small camera-facing gap")
     try expect(notched.rightStatusWingLeadingPadding, equals: 12, "right wing mirrors the small camera gap")
-    try expect(notched.rightStatusWingTrailingPadding, equals: 8, "right count hugs the curve exactly like the left dot")
-    try expect(activeNotchWing, equals: 50, "hardware-notch counter leaves a 12-point camera gap")
+    try expect(
+        notched.rightStatusWingTrailingPadding,
+        equals: HangingNotchMetrics.topShoulderRadius + 3,
+        "right wing clears the shoulder curve exactly like the left"
+    )
+    // 30 do slot + 17 de recuo exterior + 12 de folga da câmara = 59. O 50
+    // antigo somava o recuo de 8 que já não existe.
+    try expect(activeNotchWing, equals: 59, "hardware-notch counter leaves a 12-point camera gap")
     let balanced = notched.balancedStatusWingWidths(leftWidth: activeNotchWing, rightWidth: 0)
 
-    try expect(balanced.left, equals: 50, "visible left wing keeps its real content width")
+    try expect(balanced.left, equals: 59, "visible left wing keeps its real content width")
     try expect(balanced.right, equals: 28, "empty right wing is only a minimal fixed visual extension")
 
     let pill = NotchLayout(
@@ -3886,8 +3928,8 @@ func testNotchLayoutUsesNormalizedCameraClearance() throws {
 
     try expect(
         layout.leftStatusWingLeadingPadding,
-        equals: 8,
-        "the running spinner has a small left margin"
+        equals: HangingNotchMetrics.topShoulderRadius + 3,
+        "the running spinner clears the shoulder curve"
     )
     try expect(
         layout.leftStatusWingTrailingPadding,
