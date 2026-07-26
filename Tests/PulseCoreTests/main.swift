@@ -7639,6 +7639,7 @@ let tests: [(String, () throws -> Void)] = [
     ("decision log compacts past its cap", testDecisionLogCompactsPastItsCap),
     ("state store decision lands beside the state directory", testStateStoreDecisionLandsBesideTheStateDirectory),
     ("context meter reads the newest usage from the tail", testContextMeterReadsLatestUsageFromTail),
+    ("plan usage sums only the five-hour window", testPlanUsageSumsOnlyTheWindow),
 ]
 
 if CommandLine.arguments.count == 3,
@@ -7692,4 +7693,37 @@ func testContextMeterReadsLatestUsageFromTail() throws {
 
     try expect(ContextMeter.reading(transcriptPath: "/nonexistent/x.jsonl") == nil, equals: true,
                "missing transcript reads as nothing, not as zero")
+}
+
+func testPlanUsageSumsOnlyTheWindow() throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let project = root.appendingPathComponent("proj-a", isDirectory: true)
+    try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let now = Date()
+    func stamp(_ minutesAgo: Double) -> String {
+        formatter.string(from: now.addingTimeInterval(-minutesAgo * 60))
+    }
+    func usageLine(_ minutesAgo: Double, output: Int) -> String {
+        #"{"timestamp":"\#(stamp(minutesAgo))","message":{"usage":{"input_tokens":100,"cache_creation_input_tokens":50,"cache_read_input_tokens":9999,"output_tokens":\#(output)}}}"#
+    }
+    // Duas dentro da janela, uma fora, e ruído sem usage pelo meio.
+    let lines = [
+        usageLine(400, output: 1_000),          // fora das 5 h — não conta
+        usageLine(90, output: 200),
+        #"{"timestamp":"\#(stamp(30))","type":"progress"}"#,
+        usageLine(10, output: 300),
+    ]
+    try (lines.joined(separator: "\n") + "\n")
+        .write(to: project.appendingPathComponent("s1.jsonl"), atomically: true, encoding: .utf8)
+
+    let burn = PlanUsage.currentWindow(projectsDirectory: root, now: now)
+    try expect(burn.responses, equals: 2, "only in-window responses count")
+    // 2 × (100 novos + 50 cache criada) + 200 + 300; a cache LIDA fica de fora.
+    try expect(burn.tokens, equals: 800, "tokens sum input+created+output, never cache reads")
+    try expect(burn.sessions, equals: 1, "one contributing session")
 }

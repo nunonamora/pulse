@@ -111,6 +111,11 @@ struct NotchWidgetView: View {
     @State private var openedByDecision = false
     /// O painel está a mostrar o histórico em vez da lista de sessões.
     @State private var showsHistory = false
+    /// O consumo da janela de 5 h, medido ao abrir o painel e no máximo uma
+    /// vez por minuto — varrer 40 transcripts a cada fotograma seria pagar
+    /// I/O por vaidade.
+    @State private var planBurn: PlanUsage.Burn?
+    @State private var planBurnAt: Date = .distantPast
     /// As decisões lidas do disco, tal como estavam quando abriste o histórico.
     ///
     /// Lidas de uma vez e guardadas aqui, e não perguntadas ao store dentro do
@@ -415,6 +420,13 @@ struct NotchWidgetView: View {
             // a bolha encolhe fazia a lista piscar por cima do histórico a meio
             // da animação de saída.
             if isVisible { showsHistory = false }
+            if isVisible, Date().timeIntervalSince(planBurnAt) > 60 {
+                planBurnAt = Date()
+                Task.detached(priority: .utility) {
+                    let burn = PlanUsage.currentWindow()
+                    await MainActor.run { planBurn = burn }
+                }
+            }
             publishInteractiveRegion(
                 compactFrame: compactInteractiveFrame,
                 measuredContentHeight: latestMeasuredContentHeight,
@@ -582,6 +594,21 @@ struct NotchWidgetView: View {
                 .frame(width: layout.notchWidth, height: layout.height)
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
+                // O queimador do plano: consumo real da janela de 5 h, sem
+                // percentagens de um denominador inventado — os tetos dos
+                // planos não são públicos, e um número certo calibra melhor o
+                // instinto do que uma barra errada.
+                if let burn = planBurn, burn.tokens > 0 {
+                    Text(burnLabel(burn))
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.32))
+                        .help(String(
+                            format: "Last 5 h across every Claude session: %d responses, %.1fM new tokens, %d sessions",
+                            burn.responses, Double(burn.tokens) / 1_000_000, burn.sessions
+                        ))
+                        .accessibilityLabel("Plan burn: \(burn.responses) responses in five hours")
+                }
                 Text(showsHistory ? decisionHistory.count : sessionCount, format: .number)
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .monospacedDigit()
@@ -682,6 +709,15 @@ struct NotchWidgetView: View {
     /// no disco naquele momento — incluindo a decisão que tomaste há dez
     /// segundos — sem que a vista ande a sondar o ficheiro enquanto está
     /// fechada, que é o tempo quase todo.
+    /// "1,2M · 5 h" — curto o bastante para viver ao lado da contagem.
+    private func burnLabel(_ burn: PlanUsage.Burn) -> String {
+        let millions = Double(burn.tokens) / 1_000_000
+        let amount = millions >= 1
+            ? String(format: "%.1fM", millions)
+            : String(format: "%dk", burn.tokens / 1000)
+        return "\(amount) · 5h"
+    }
+
     private func toggleHistory() {
         if !showsHistory {
             decisionHistory = store.recentDecisions(limit: Self.historyLength)
