@@ -13,7 +13,11 @@ struct ExpansionRippleEffect: ViewModifier {
     /// Bump to fire one ripple; the animator triggers on change.
     let trigger: Int
 
-    private nonisolated static let duration: TimeInterval = 0.9
+    /// Uma constante, dois consumidores: o animator que faz avançar o relógio
+    /// e o shader que decide quando a onda morre. Estavam declaradas duas
+    /// vezes com o mesmo valor — o dia em que uma mudasse sem a outra, o
+    /// ripple era cortado a meio ou ficava a pagar um shader morto.
+    nonisolated static let duration: TimeInterval = 0.9
 
     func body(content: Content) -> some View {
         content.keyframeAnimator(
@@ -40,7 +44,7 @@ private struct RippleShaderModifier: ViewModifier {
     private nonisolated static let frequency: Double = 6
     private nonisolated static let decay: Double = 5
     private nonisolated static let speed: Double = 1_300
-    private nonisolated static let duration: TimeInterval = 0.9
+    private nonisolated static var duration: TimeInterval { ExpansionRippleEffect.duration }
 
     func body(content: Content) -> some View {
         let elapsedTime = elapsedTime

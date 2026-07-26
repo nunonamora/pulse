@@ -11,9 +11,14 @@ public enum SessionMenuLayout {
     /// header math below so both columns stay aligned.
     public static let sessionRowLeadingInset: CGFloat = 12
     /// Outer insets for header content living in the expanded bar wings,
-    /// chosen so the header columns line up with the session rows below:
-    /// leading matches the row's agent icon (8pt centering gutter + 4pt card
-    /// inset + 12pt row leading), trailing matches the row's chevron button
+    /// chosen so the header columns line up with the session rows below.
+    ///
+    /// A conta em modo notch: o gutter de centragem são 22 pt (8 do painel
+    /// mais os 14 de `expandedContentSideInset`, que a vista soma à parte), e
+    /// 22 + 4 de card inset + 12 de row leading = 38 — a mesma coluna onde o
+    /// cabeçalho aterra com os seus 24 + 14. O comentário antigo dizia "8pt
+    /// gutter" e deixava a soma por explicar; a coluna sempre foi a mesma,
+    /// só a explicação é que não batia certo. Trailing matches the chevron
     /// (8 + 4 + 12pt chevron trailing).
     public static let expandedHeaderLeadingInset: CGFloat = 24
     public static let expandedHeaderTrailingInset: CGFloat = 24

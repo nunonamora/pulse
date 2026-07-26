@@ -118,7 +118,7 @@ struct PermissionDecisionCard: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(request.summary)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.96))
+                    .foregroundStyle(.white.opacity(0.94))
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -129,8 +129,11 @@ struct PermissionDecisionCard: View {
                     .monospacedDigit()
                     // Um prazo a correr não é metadado. A 0,34 lia-se como
                     // rodapé e só se dava por ele quando ficava laranja — que
-                    // é tarde de mais para ser um aviso.
-                    .foregroundStyle(isUrgent ? Color.orange : .white.opacity(0.48))
+                    // é tarde de mais para ser um aviso. 0,5 e não um valor
+                    // próprio: é o escalão dos metadados deste cartão, e a
+                    // auditoria apanhou 0,48/0,5/0,52 a fingirem ser escalões
+                    // diferentes a quinze pontos de distância.
+                    .foregroundStyle(isUrgent ? Color.orange : .white.opacity(0.5))
             }
 
             HStack(spacing: 6) {
@@ -212,8 +215,8 @@ struct PermissionDecisionCard: View {
                         .foregroundStyle(justCopied ? Color.green : .white.opacity(0.55))
                         .padding(5)
                         .background(
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(.white.opacity(0.10))
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(.white.opacity(0.09))
                         )
                 }
                 .buttonStyle(.plain)
@@ -270,14 +273,14 @@ struct PermissionDecisionCard: View {
                         .foregroundStyle(.white.opacity(added || removed ? 0.94 : 0.6))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .font(.system(size: 11, design: .monospaced))
+                .font(.system(size: 11.5, design: .monospaced))
                 .padding(.horizontal, 4)
                 .padding(.vertical, 0.5)
                 .background(
                     (added ? Color.green : Color.red)
                         .opacity(added || removed ? 0.10 : 0)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 3))
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             }
         }
         .textSelection(.enabled)
@@ -290,7 +293,7 @@ struct PermissionDecisionCard: View {
                 let parts = line.components(separatedBy: "\t")
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(parts.first ?? "")
-                        .font(.system(size: 10.5, weight: .medium))
+                        .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.white.opacity(0.45))
                         .frame(width: 76, alignment: .leading)
                     Text(parts.count > 1 ? parts[1] : "")
@@ -306,7 +309,7 @@ struct PermissionDecisionCard: View {
     private func planBody(_ text: String) -> some View {
         Text(LocalizedStringKey(text))
             .font(.system(size: 11.5))
-            .foregroundStyle(.white.opacity(0.92))
+            .foregroundStyle(.white.opacity(0.94))
             .textSelection(.enabled)
     }
 
@@ -353,7 +356,7 @@ struct PermissionDecisionCard: View {
                         Text("Always allow this command")
                             .font(.system(size: 11))
                     }
-                    .foregroundStyle(.white.opacity(0.42))
+                    .foregroundStyle(.white.opacity(0.45))
                 }
                 .buttonStyle(.plain)
                 .help("Writes a permission rule. This one does not expire.")
@@ -393,13 +396,12 @@ struct PermissionDecisionCard: View {
 /// rato. Uma linha de ajuda debaixo dos botões dizia o mesmo e ocupava altura
 /// que o comando queria.
 private struct DecisionButton: View {
-    enum Style { case primary, destructive, quiet }
+    enum Style { case primary, destructive }
 
     let label: String
     let systemImage: String
     var shortcut: String?
     var style: Style
-    var fillsWidth: Bool = false
     var action: () -> Void
 
     @State private var isHovering = false
@@ -413,12 +415,12 @@ private struct DecisionButton: View {
                     .font(.system(size: 11.5, weight: .medium))
                 if let shortcut {
                     Text(shortcut)
-                        .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundStyle(.white.opacity(0.38))
                         .padding(.horizontal, 3.5)
                         .padding(.vertical, 1)
                         .background(
-                            RoundedRectangle(cornerRadius: 3)
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
                                 .fill(.white.opacity(0.09))
                         )
                 }
@@ -426,7 +428,6 @@ private struct DecisionButton: View {
             .foregroundStyle(foreground)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .frame(maxWidth: fillsWidth ? .infinity : nil)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(fill)
@@ -450,8 +451,7 @@ private struct DecisionButton: View {
     private var foreground: Color {
         switch style {
         case .primary:     return .white
-        case .destructive: return isHovering ? .white : .white.opacity(0.82)
-        case .quiet:       return .white.opacity(0.72)
+        case .destructive: return isHovering ? .white : .white.opacity(0.8)
         }
     }
 
@@ -459,7 +459,6 @@ private struct DecisionButton: View {
         switch style {
         case .primary:     return .white.opacity(isHovering ? 0.24 : 0.16)
         case .destructive: return .red.opacity(isHovering ? 0.34 : 0.20)
-        case .quiet:       return .white.opacity(isHovering ? 0.12 : 0.06)
         }
     }
 }

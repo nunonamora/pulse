@@ -53,31 +53,6 @@ struct NotchGlassBackdrop: View {
     }
 }
 
-/// Vidro numa forma de cantos redondos, para superfícies que não são a
-/// silhueta do notch.
-///
-/// O cartão de decisão precisa do mesmo material que o painel, mas a sua forma
-/// não tem ombros nem se agarra ao topo do ecrã. Tudo o resto — o backdrop
-/// privado, o recuo para o desfoque normal em sistemas sem ele — é partilhado.
-struct GlassSurface: View {
-    var cornerRadius: CGFloat = 14
-    var frostRadius: Double = NotchGlassStyle.defaultFrostRadius
-
-    var body: some View {
-        Group {
-            if NotchCustomGlassView.isSupported {
-                NotchCustomGlassBackdrop(
-                    cornerStyle: .roundedRect(radius: cornerRadius),
-                    frostRadius: frostRadius
-                )
-            } else {
-                NotchVisualEffectBackdrop(cornerStyle: .roundedRect(radius: cornerRadius))
-            }
-        }
-        .allowsHitTesting(false)
-    }
-}
-
 /// The SwiftUI-drawn half: the black scrim over the glass. Pure vector
 /// content, so it can ride through layer effects like the expansion ripple.
 struct NotchGlassScrim: View {
