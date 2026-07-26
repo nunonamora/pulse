@@ -14,6 +14,7 @@ struct AtalaiaSettingsView: View {
     @AppStorage("voiceSilentOnCall") private var voiceSilentOnCall = true
     @AppStorage("voiceUseSystem") private var voiceUseSystem = false
     @AppStorage("screenSelectionMode") private var screenSelectionMode = ScreenSelectionMode.pointer.rawValue
+    @AppStorage("hotkeyEnabled") private var hotkeyEnabled = true
     @AppStorage("skipDecisionWhenTerminalVisible")
     private var skipDecisionWhenTerminalVisible = true
     @AppStorage("glassFrostRadiusNotch") private var notchFrostRadius = NotchGlassStyle.defaultFrostRadius
@@ -54,6 +55,11 @@ struct AtalaiaSettingsView: View {
                     set: updateLoginItem
                 ))
                 Toggle("Hide when no sessions are active", isOn: $hideWhenEmpty)
+                Toggle("Open the panel with \(GlobalHotkey.Combination.default.displayString)",
+                       isOn: $hotkeyEnabled)
+                Text("Works from any app. Press it again to close.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
                 Toggle(
                     "Skip the permission card when that terminal is already in front",
                     isOn: $skipDecisionWhenTerminalVisible

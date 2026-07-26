@@ -16,6 +16,7 @@ struct AtalaiaApplication: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let hotkey = GlobalHotkey()
     private var panelController: NotchPanelController?
     private(set) var store: StateStore?
     private var observationScheduler: ObservationScheduler?
@@ -113,6 +114,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // assinatura que a antecede.
             Voice.shared.prewarm()
             self.installScreenshotSignal()
+            // O atalho global. Registado depois do painel existir, para o
+            // primeiro toque já encontrar alguém a quem falar.
+            if UserDefaults.standard.object(forKey: "hotkeyEnabled") as? Bool ?? true {
+                self.hotkey.register(.default) {
+                    NotificationCenter.default.post(name: .atalaiaToggleMenu, object: nil)
+                }
+            }
         }
     }
 

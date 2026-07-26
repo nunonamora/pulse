@@ -375,6 +375,20 @@ struct NotchWidgetView: View {
             presentPendingDecision(isPending)
         }
         .onAppear { presentPendingDecision(store.hasPendingDecision) }
+        .onReceive(NotificationCenter.default.publisher(for: .atalaiaToggleMenu)) { _ in
+            // O atalho abre E fecha. Um atalho que só abre obriga-te a ir ao
+            // rato para o desfazer, que é exatamente o que ele existe para
+            // evitar.
+            if isExpanded {
+                collapseMenu()
+            } else {
+                // Ativar a app é o que permite ao painel receber teclas. Sem
+                // isto abria mudo: via-se a lista e não se podia lá mexer.
+                NSApp.activate(ignoringOtherApps: true)
+                onKeyboardFocusChange(true)
+                openMenu()
+            }
+        }
     }
 
     // MARK: Bar
