@@ -2019,6 +2019,12 @@ enum UIRender {
             )
         }
 
+        // As Definições ficam de fora com conhecimento de causa: o Form
+        // nativo é AppKit por dentro e sai um retângulo branco daqui — e
+        // reescrevê-lo em SwiftUI puro para o arnês o ver seria piorar a app
+        // para melhorar a ferramenta. A janela usa o idioma do sistema; o que
+        // há para auditar nela é a copy, e essa lê-se no código.
+
         return written.isEmpty ? "não desenhou nada" : "ok: \(written.joined(separator: ", "))"
     }
 
