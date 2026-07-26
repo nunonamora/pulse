@@ -36,9 +36,13 @@ struct WalkingMascot: View {
     private static let crossing: TimeInterval = 2.6
 
     var body: some View {
+        // Decorativo por definição: diz QUEM trabalha a quem vê, e o
+        // indicador com contagem já o diz a quem ouve. Duas fontes do mesmo
+        // facto no VoiceOver seriam ruído, não redundância.
         if reduceMotion || isStaticRender {
             sprite(frame: 0)
                 .frame(width: runway, alignment: .center)
+                .accessibilityHidden(true)
         } else {
             TimelineView(.periodic(from: .now, by: 1.0 / 30)) { timeline in
                 let t = timeline.date.timeIntervalSinceReferenceDate
@@ -58,6 +62,7 @@ struct WalkingMascot: View {
                     )
                     .frame(width: runway, alignment: .center)
             }
+            .accessibilityHidden(true)
         }
     }
 

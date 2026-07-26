@@ -890,6 +890,12 @@ private extension SessionStatus {
 private struct StatusSummaryIndicator: View {
     let kind: SessionStatusSummary.StatusEntry.Kind
     let count: Int
+    /// "Diferenciar sem cor", da Acessibilidade. Verde-parado e
+    /// vermelho-precisa-de-ti são a mesma bola para quem não separa os dois:
+    /// com a preferência ativa, quem precisa de ti ganha FORMA — um triângulo
+    /// — e a cor passa a redundância em vez de canal único.
+    @Environment(\.accessibilityDifferentiateWithoutColor)
+    private var differentiateWithoutColor
 
     /// Só um destes estados te pede alguma coisa.
     ///
@@ -909,16 +915,22 @@ private struct StatusSummaryIndicator: View {
             case .spinner:
                 WorkingPixelSpinner()
             case .greenDot, .redDot, .mutedDot:
-                Circle()
-                    .fill(indicatorColor(for: kind.indicatorStyle))
-                    .frame(width: needsYou ? 9 : 7, height: needsYou ? 9 : 7)
-                    .background {
-                        if needsYou {
-                            Circle()
-                                .fill(indicatorColor(for: kind.indicatorStyle).opacity(0.22))
-                                .frame(width: 18, height: 18)
+                if differentiateWithoutColor && needsYou {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(indicatorColor(for: kind.indicatorStyle))
+                } else {
+                    Circle()
+                        .fill(indicatorColor(for: kind.indicatorStyle))
+                        .frame(width: needsYou ? 9 : 7, height: needsYou ? 9 : 7)
+                        .background {
+                            if needsYou {
+                                Circle()
+                                    .fill(indicatorColor(for: kind.indicatorStyle).opacity(0.22))
+                                    .frame(width: 18, height: 18)
+                            }
                         }
-                    }
+                }
             }
             Text(count, format: .number)
                 .font(.system(

@@ -32,6 +32,11 @@ struct PermissionDecisionCard: View {
     var textInset: CGFloat
 
     @FocusState private var keyboardFocused: Bool
+    /// "Aumentar contraste" da Acessibilidade: as arestas de meio ponto a 6%
+    /// são material com a preferência desligada e invisíveis com ela ligada —
+    /// quem a ativa está a dizer que os subtis não lhe chegam.
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var noColor
+    @Environment(\.colorSchemeContrast) private var contrast
 
     private var remaining: Int {
         max(0, Int(request.expiresAt.timeIntervalSince(now)))
@@ -214,10 +219,12 @@ struct PermissionDecisionCard: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .strokeBorder(
                             LinearGradient(
-                                colors: [.white.opacity(0.04), .white.opacity(0.12)],
+                                colors: contrast == .increased
+                                    ? [.white.opacity(0.25), .white.opacity(0.40)]
+                                    : [.white.opacity(0.04), .white.opacity(0.12)],
                                 startPoint: .top, endPoint: .bottom
                             ),
-                            lineWidth: 0.5
+                            lineWidth: contrast == .increased ? 1 : 0.5
                         )
                 )
         )
