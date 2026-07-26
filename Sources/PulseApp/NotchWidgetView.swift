@@ -58,6 +58,11 @@ final class NotchPointerTracker: ObservableObject {
     }
 }
 
+/// A spring das superfícies interiores do painel (linhas a abrir, scroll até
+/// à seleção). A da expansão do painel (0,32/0,86) fica própria: é a única
+/// animação que muda a silhueta inteira, e um nadinha mais lenta de propósito.
+private let innerSpring = Animation.spring(response: 0.28, dampingFraction: 0.9)
+
 struct NotchWidgetView: View {
     @Bindable var store: StateStore
     @AppStorage("hideWhenEmpty") private var hideWhenEmpty = false
@@ -546,7 +551,7 @@ struct NotchWidgetView: View {
                 // "Active sessions" com o histórico aberto era assinar a lista
                 // errada, e o número ao lado ficava a contar outra coisa.
                 Text(showsHistory ? "Recent decisions" : "Active sessions")
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.55))
                 Spacer(minLength: 0)
             }
@@ -562,7 +567,7 @@ struct NotchWidgetView: View {
                 Text(showsHistory ? decisionHistory.count : sessionCount, format: .number)
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(.white.opacity(0.35))
+                    .foregroundStyle(.white.opacity(0.32))
                 // O histórico mora aqui, e não nas definições: é a mesma coisa
                 // que a lista — o que os teus agentes andaram a fazer —, só que
                 // no passado. Trocar a lista por ele no mesmo painel guarda
@@ -1053,7 +1058,9 @@ private struct SessionMenuCard: View {
                         .foregroundStyle(.white.opacity(0.52))
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.horizontal, 14)
+                // 12 e não 14: com o contentor a 4 e o gutter a 22, é o que
+                // alinha este texto na coluna dos 38 pt das outras superfícies.
+                .padding(.horizontal, 12)
                 .padding(.bottom, 12)
             } else {
                 // The list owns the extra height from inline actions. Once
@@ -1080,7 +1087,7 @@ private struct SessionMenuCard: View {
                     .onChange(of: actionsSessionID) { _, sessionID in
                         guard let sessionID else { return }
                         DispatchQueue.main.async {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                            withAnimation(innerSpring) {
                                 proxy.scrollTo(sessionID, anchor: .bottom)
                             }
                         }
@@ -1099,7 +1106,7 @@ private struct SessionMenuCard: View {
                 Text(errorMessage)
                     .font(.system(size: 11))
                     .foregroundStyle(.red)
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, 12)
                     .padding(.bottom, 10)
             }
         }
@@ -1186,7 +1193,7 @@ private struct SessionMenuCard: View {
     }
 
     private func toggleActions(for session: AgentSession) {
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+        withAnimation(innerSpring) {
             actionsSessionID = actionsSessionID == session.id ? nil : session.id
         }
         onRowInteractionChange(actionsSessionID != nil)
@@ -1427,16 +1434,8 @@ private struct SessionRow: View {
             // pega no rato. Uma legenda fixa no rodapé dizia o mesmo, ocupava
             // altura para sempre e continuava a ser lida por ninguém.
             if let shortcutDigit {
-                Text("⌘\(shortcutDigit)")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.42))
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4).fill(.white.opacity(0.08))
-                    )
+                KeycapChip(label: "⌘\(shortcutDigit)")
                     .transition(.opacity)
-                    .accessibilityHidden(true)
             }
             // The system wakes this view on minute boundaries while the
             // row is on screen — no timers, no polling while collapsed.
@@ -1457,7 +1456,7 @@ private struct SessionRow: View {
         Button(action: toggleActions) {
             Image(systemName: "chevron.down")
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.white.opacity(isHovered || isActionsExpanded ? 0.65 : 0.3))
+                .foregroundStyle(.white.opacity(isHovered || isActionsExpanded ? 0.65 : 0.32))
                 .rotationEffect(.degrees(isActionsExpanded ? 180 : 0))
                 .frame(width: 24, height: 24)
                 .background(Circle().fill(.white.opacity(isActionsExpanded ? 0.1 : 0)))
@@ -1549,7 +1548,7 @@ private struct SessionRow: View {
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.75))
                 .frame(width: 22, height: 22)
-                .background(Circle().fill(.white.opacity(0.08)))
+                .background(Circle().fill(.white.opacity(0.09)))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -1628,7 +1627,9 @@ private struct DecisionHistoryCard: View {
                         .foregroundStyle(.white.opacity(0.52))
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.horizontal, 14)
+                // 12 e não 14: com o contentor a 4 e o gutter a 22, é o que
+                // alinha este texto na coluna dos 38 pt das outras superfícies.
+                .padding(.horizontal, 12)
                 .padding(.bottom, 12)
             } else {
                 ScrollView(showsIndicators: false) {
@@ -1667,7 +1668,7 @@ private struct DecisionHistoryRow: View {
             // é a frase que identifica a decisão, e o veredicto à direita é que
             // não pode ceder espaço nenhum.
             Text(record.summary)
-                .font(.system(size: 12.5))
+                .font(.system(size: 12))
                 .foregroundStyle(.white.opacity(0.82))
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -1790,7 +1791,7 @@ struct ActionListRow: View {
                     .font(.system(size: 11, weight: .semibold))
                     .frame(width: 14)
                 Text(label)
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                 if fillsWidth {
                     Spacer(minLength: 0)
                 }

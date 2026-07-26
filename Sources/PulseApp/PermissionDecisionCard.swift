@@ -414,15 +414,7 @@ private struct DecisionButton: View {
                 Text(label)
                     .font(.system(size: 11.5, weight: .medium))
                 if let shortcut {
-                    Text(shortcut)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.38))
-                        .padding(.horizontal, 3.5)
-                        .padding(.vertical, 1)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(.white.opacity(0.09))
-                        )
+                    KeycapChip(label: shortcut, subdued: true)
                 }
             }
             .foregroundStyle(foreground)
