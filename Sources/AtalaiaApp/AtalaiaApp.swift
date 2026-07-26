@@ -17,6 +17,7 @@ struct AtalaiaApplication: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotkey = GlobalHotkey()
+    private var renderSignalSource: DispatchSourceSignal?
     private var panelController: NotchPanelController?
     private(set) var store: StateStore?
     private var observationScheduler: ObservationScheduler?
@@ -114,6 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // assinatura que a antecede.
             Voice.shared.prewarm()
             self.installScreenshotSignal()
+            self.installRenderSignal()
             // O atalho global. Registado depois do painel existir, para o
             // primeiro toque já encontrar alguém a quem falar.
             if UserDefaults.standard.object(forKey: "hotkeyEnabled") as? Bool ?? true {
@@ -130,6 +132,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Tem de ser a app a disparar: a autorização de Gravação de Ecrã é dada ao
     /// pacote, e o binário do CLI vive fora dele — teria identidade diferente e
     /// seria recusado.
+    /// `kill -USR2 $(pgrep -x Atalaia)` desenha as vistas para /tmp, sem ecrã.
+    private func installRenderSignal() {
+        let source = DispatchSource.makeSignalSource(signal: SIGUSR2, queue: .main)
+        source.setEventHandler {
+            MainActor.assumeIsolated {
+                let status = UIRender.writeAll()
+                try? status.write(toFile: "/tmp/atalaia-ui.status",
+                                  atomically: true, encoding: .utf8)
+            }
+        }
+        source.resume()
+        renderSignalSource = source
+        signal(SIGUSR2, SIG_IGN)
+    }
+
     private func installScreenshotSignal() {
         let source = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
         source.setEventHandler {

@@ -123,7 +123,10 @@ struct PermissionDecisionCard: View {
                 Text("\(remaining)s")
                     .font(.system(size: 11, design: .monospaced))
                     .monospacedDigit()
-                    .foregroundStyle(isUrgent ? Color.orange : .white.opacity(0.34))
+                    // Um prazo a correr não é metadado. A 0,34 lia-se como
+                    // rodapé e só se dava por ele quando ficava laranja — que
+                    // é tarde de mais para ser um aviso.
+                    .foregroundStyle(isUrgent ? Color.orange : .white.opacity(0.48))
             }
 
             HStack(spacing: 6) {
@@ -159,8 +162,34 @@ struct PermissionDecisionCard: View {
     /// chavetas e aspas a ocupar o espaço da decisão.
     @ViewBuilder
     private func payload(_ text: String) -> some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            Group {
+        // Só rola quando não cabe.
+        //
+        // Um comando de uma linha dentro de uma scroll view apanha o gesto de
+        // scroll do trackpad sem ter para onde o levar, e a barra pisca ao
+        // passar por cima. Nada disso serve um bloco de texto que cabe inteiro
+        // no sítio onde está.
+        let scrolls = contentHeight > payloadHeight
+        return Group {
+            if scrolls {
+                ScrollView(.vertical, showsIndicators: false) { payloadBody(text) }
+            } else {
+                payloadBody(text)
+            }
+        }
+        .frame(height: contentHeight > 0 ? min(contentHeight, payloadHeight) : nil)
+        .frame(maxHeight: payloadHeight)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.black.opacity(0.45))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(.white.opacity(0.06), lineWidth: 0.5)
+                )
+        )
+    }
+
+    private func payloadBody(_ text: String) -> some View {
+        Group {
                 switch request.detailKind {
                 case .diff:    diffBody(text)
                 case .fields:  fieldsBody(text)
@@ -171,27 +200,13 @@ struct PermissionDecisionCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(9)
-            .background {
-                GeometryReader { geo in
-                    Color.clear
-                        .onAppear { contentHeight = geo.size.height }
-                        .onChange(of: geo.size.height) { _, new in contentHeight = new }
-                }
+        .background {
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { contentHeight = geo.size.height }
+                    .onChange(of: geo.size.height) { _, new in contentHeight = new }
             }
         }
-        .frame(height: contentHeight > 0 ? min(contentHeight, payloadHeight) : payloadHeight)
-        .background(
-            // Claro sobre o vidro, e não mais um poço preto: o cartão inteiro
-            // já vive sobre o escuro do painel, e uma segunda superfície
-            // escura com contorno próprio lia-se como uma caixa dentro de
-            // outra caixa em vez de um recuo no mesmo material.
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(.black.opacity(0.45))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(.white.opacity(0.06), lineWidth: 0.5)
-                )
-        )
     }
 
     private func monospaced(_ text: String) -> some View {
@@ -285,10 +300,23 @@ struct PermissionDecisionCard: View {
             }
 
             if hasAlwaysOption {
-                DecisionButton(
-                    label: "Always allow this", systemImage: "checkmark.circle",
-                    shortcut: nil, style: .quiet, fillsWidth: true
-                ) { decide(.allowAlways) }
+                // Pequeno, e o mais discreto dos três.
+                //
+                // Era uma barra a toda a largura, o maior alvo do cartão — e é
+                // a única decisão daqui que não se desfaz: escreve uma regra
+                // que passa a valer para sempre. O peso visual estava ao
+                // contrário do peso real.
+                Button { decide(.allowAlways) } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle")
+                            .font(.system(size: 9.5))
+                        Text("Always allow this command")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundStyle(.white.opacity(0.42))
+                }
+                .buttonStyle(.plain)
+                .help("Writes a permission rule. This one does not expire.")
             }
         }
     }

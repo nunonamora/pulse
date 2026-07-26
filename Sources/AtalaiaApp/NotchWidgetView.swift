@@ -970,7 +970,12 @@ private struct SessionMenuCard: View {
                 // past the panel and clipping the lower controls.
                 ScrollViewReader { proxy in
                     ScrollView(showsIndicators: false) {
-                        LazyVStack(spacing: 0) {
+                        // `VStack` e não `LazyVStack`: o ganho da versão
+                        // preguiçosa mede-se em centenas de linhas, e aqui
+                        // nunca há mais do que uma mão cheia de sessões. Em
+                        // troca, uma pilha normal desenha-se fora de ecrã, o
+                        // que permite retratar a lista sem depender do ecrã.
+                        VStack(spacing: 0) {
                             ForEach(sessions) { session in
                                 row(for: session)
                                     .id(session.id)
@@ -1549,5 +1554,108 @@ private final class RightClickForwardingView: NSView {
         default:
             return nil
         }
+    }
+}
+
+// MARK: - Retrato das vistas, sem ecrã
+
+/// Desenha as vistas do painel para PNG, sem depender do ecrã.
+///
+/// Existe porque a fotografia do ecrã não serve sempre: com o Mac bloqueado o
+/// sistema devolve o wallpaper e mais nada, e é justamente aí que se perde a
+/// única forma de olhar para o próprio trabalho. `ImageRenderer` desenha a
+/// árvore de vistas em CPU e não pede ecrã nenhum.
+///
+/// O que isto NÃO vê, e porquê:
+///
+///  - **O vidro.** O backdrop é alimentado pelo servidor de janelas e sai em
+///    branco. Serve para geometria — alinhamento, medidas, tipos, o que cabe e
+///    o que transborda — e não para julgar material.
+///  - **As linhas de sessão.** Cada uma tem um `TimelineView` a contar o tempo
+///    decorrido, e um `TimelineView` fora de ecrã não tem relógio a que se
+///    agarrar: o `ImageRenderer` devolve o retângulo amarelo de vista inválida.
+///    Tentar retratá-las daqui dava uma imagem que parecia um resultado e não
+///    era; a lista continua a precisar do ecrã desbloqueado.
+///
+///     kill -USR2 $(pgrep -x Atalaia)
+///
+/// escreve /tmp/atalaia-ui-*.png.
+@MainActor
+enum UIRender {
+
+    static func writeAll(to directory: String = "/tmp") -> String {
+        let fixtures = sampleSessions()
+        var written: [String] = []
+
+        // Fundo cinzento médio e não transparente: sobre transparente não se vê
+        // se um texto claro tem contraste, e é isso que se está a verificar.
+        func render(_ view: some View, width: CGFloat, name: String) {
+            let framed = view
+                .frame(width: width)
+                .background(Color(white: 0.10))
+                .padding(16)
+                .background(Color(white: 0.42))
+            let renderer = ImageRenderer(content: framed)
+            renderer.scale = 2
+            guard let image = renderer.nsImage,
+                  let tiff = image.tiffRepresentation,
+                  let bitmap = NSBitmapImageRep(data: tiff),
+                  let png = bitmap.representation(using: .png, properties: [:])
+            else { return }
+            let path = "\(directory)/atalaia-ui-\(name).png"
+            try? png.write(to: URL(fileURLWithPath: path))
+            written.append(name)
+        }
+
+        render(
+            SessionMenuCard(
+                sessions: [], stateDirectoryURL: URL(fileURLWithPath: "/tmp"),
+                dismiss: {}, acknowledge: { _ in }, sessionTitle: { $0.projectName },
+                overrideName: { _ in nil }, rename: { _, _ in }, setKeyboardFocus: { _ in },
+                keyboardActive: false, onRowInteractionChange: { _ in }
+            ),
+            width: 760, name: "empty"
+        )
+
+        let now = Date()
+        render(
+            PermissionDecisionCard(
+                request: PermissionRequest(
+                    id: "x", sessionID: "s", tool: .claude,
+                    cwd: "/Users/você/coding/atalaia", toolName: "Bash",
+                    summary: "Limpar a pasta de build e forçar o push",
+                    detail: "rm -rf build/ && git push --force origin main",
+                    detailKind: .command,
+                    suggestions: [AnyCodable(["behavior": "allow"])],
+                    createdAt: now, expiresAt: now.addingTimeInterval(96)
+                ),
+                now: now, decide: { _ in }, reveal: {},
+                bandInset: 14, textInset: 28
+            ),
+            width: 800, name: "decision"
+        )
+
+        return written.isEmpty ? "não desenhou nada" : "ok: \(written.joined(separator: ", "))"
+    }
+
+    /// Sessões de exemplo que cobrem os estados que a lista sabe desenhar.
+    private static func sampleSessions() -> [AgentSession] {
+        let now = Date()
+        func make(
+            _ tool: AgentTool, _ name: String, _ status: SessionStatus,
+            _ reason: AttentionReason? = nil, minutes: Double
+        ) -> AgentSession {
+            AgentSession(
+                tool: tool, sessionID: name, pid: 1, status: status,
+                attentionReason: reason, cwd: "/Users/você/coding/\(name)",
+                startedAt: now.addingTimeInterval(-minutes * 60), updatedAt: now
+            )
+        }
+        return [
+            make(.claude, "atalaia", .needsAttention, .permission, minutes: 3),
+            make(.claude, "hermes", .working, minutes: 42),
+            make(.codex, "siva", .idle, minutes: 128),
+            make(.opencode, "um-projeto-com-nome-comprido", .idle, minutes: 7),
+        ]
     }
 }
