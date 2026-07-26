@@ -1,10 +1,10 @@
 # Pulse
 
-Os teus agentes de código vigiados no notch do Mac — **com voz em português** e
-**decisões de permissão sem sair do editor**.
+Os teus agentes de código vigiados no notch do Mac — **com voz em português**,
+**decisões de permissão sem sair do editor** e **tudo ao alcance do teclado**.
 
-Pulse é a torre de vigia em ponto alto: quem lá está observa e dá o alerta. É
-o que esta app faz, no sítio mais alto do ecrã.
+Pulse é a pulsação: o sinal contínuo e discreto de que há vida — os agentes a
+trabalhar, no sítio mais alto do ecrã. Quando um precisa de ti, o sinal muda.
 
 > Derivado do [AgentGlance](https://github.com/Inakitajes/AgentGlance) de Josemi
 > Hernandez (MIT). Todo o motor — deteção de sessões, integrações com Claude
@@ -51,7 +51,17 @@ botão nas definições que te leva lá.
 ### Decisões de permissão
 
 Quando o Claude Code pede autorização, o cartão aparece no notch com o comando
-e os botões. **Enquanto ele está aberto, o agente está mesmo parado à espera**
+e os botões — **exceto se já estiveres a olhar para esse terminal**: aí a app
+sai da frente, larga o pedido e o diálogo normal aparece onde tens os olhos.
+Dois sítios para responder à mesma pergunta obrigavam-te a escolher onde
+carregar antes de escolheres o que responder. (Desliga-se nas definições.)
+
+O cartão lê o pedido pela forma que ele tem: um comando sai monoespaçado, um
+diff sai em linhas coloridas com as partes iguais cortadas, os argumentos de
+uma ferramenta desconhecida saem como campos — nunca JSON com chavetas. Um
+sinal de risco (read-only / modifies / destructive) lê-se antes do texto, e um
+botão de copiar aparece sobre o comando para o caminho do meio: ir testá-lo à
+mão antes de decidir. **Enquanto ele está aberto, o agente está mesmo parado à espera**
 — e é por isso que o cartão mostra um prazo a correr.
 
 | | |
@@ -64,6 +74,28 @@ e os botões. **Enquanto ele está aberto, o agente está mesmo parado à espera
 Passados 150 segundos sem resposta, a app larga o agente por sua iniciativa e o
 diálogo aparece no terminal. Nunca se deixa um agente parado à espera de uma app
 que podes nem estar a ver.
+
+Cada allow e deny fica registado: o botão de relógio no painel mostra as
+últimas decisões, com veredicto e há quanto tempo. As deferências ficam de
+fora — não são escolhas de ninguém.
+
+### Teclado
+
+**⌥⌘A** abre e fecha o painel de qualquer app, já com foco de teclado: setas
+para escolher, **Enter** salta para o terminal da sessão, **Esc** fecha,
+**⌘1–9** saltam direto. Os números aparecem nas linhas enquanto o teclado
+manda, e desaparecem quando pegas no rato. No cartão de decisão, **⏎** permite
+e **esc** nega — impressos nos próprios botões.
+
+O salto para o terminal acerta no separador e no split exatos dentro do cmux
+(pelos ids que o cmux exporta), no Ghostty, iTerm2 e Terminal; nos outros traz
+a app certa à frente.
+
+### O mascote
+
+Quando há trabalho a decorrer, um mini agente em pixels passeia ao lado da
+barra — a cor diz quem trabalha. Some-se quando não há nada a dizer, e fica
+quieto para quem pede menos movimento ao sistema.
 
 ## Instalar
 
@@ -122,21 +154,34 @@ reinícios da app sem deixar o agente pendurado.
 
 ## O ícone
 
-Um vigia a espreitar do recorte, desenhado para 16 px e não para 512 — é
-pequeno que ele é visto. Duas versões anteriores morreram por isso: três arcos
-concêntricos, em que o terceiro desaparecia por completo; e dois arcos com um
-ponto de luz, que se lia como uma cara triste, com o ponto a virar nariz.
+Um P cuja haste ondula — a letra feita da coisa que o nome diz. Desenhado em
+código (`scripts/make-icon.swift`), um tamanho de cada vez: abaixo de 64 px a
+onda sai e a letra engrossa, porque a amplitude cabia em meio pixel e lia-se
+como haste torta. A superelipse é a do sistema, a luz vem de cima, e o grão
+existe para a superfície não se ler como render.
 
-Regenera-se com `./scripts/make-icon.sh` a partir de `assets/icon.svg`.
+Sete direções anteriores morreram e ficaram documentadas no ficheiro com o
+motivo — de uma torre que se lia como peça de xadrez a um feixe que se lia
+como candeeiro. Regenera-se com `./scripts/make-icon.sh`.
+
+## Verificar sem ecrã
+
+A app sabe desenhar-se a si própria: `kill -USR2 $(pgrep -x Pulse)` escreve
+retratos das vistas em `/tmp/pulse-ui-*.png` — lista, cartão de decisão,
+histórico, estado vazio e as duas apresentações da barra — sem depender do
+ecrã, do wallpaper ou de autorizações. `python3 scripts/audit-contrast.py`
+mede o contraste do texto sobre esses retratos e falha abaixo de 4,5:1.
+
+Foi assim que a interface foi auditada com o ecrã bloqueado; as falhas que
+estas ferramentas apanharam (uma linha repetida em cada sessão, um botão
+perigoso com o maior alvo do cartão, texto abaixo do mínimo de contraste)
+estão descritas nos commits que as corrigem.
 
 ## Estado
 
-A voz e as decisões estão implementadas e o mecanismo está provado ponta a
-ponta: o hook bloqueia mesmo, os quatro caminhos devolvem o JSON que o Claude
-Code espera, e não ficam ficheiros para trás.
-
-O que **não** está confirmado é o lado sensorial — se a voz se ouve e se o
-cartão aparece como deve. Isso só se sabe a usar.
+Voz, decisões, histórico, teclado e supressão estão implementados e provados:
+o hook bloqueia mesmo, os quatro caminhos devolvem o JSON certo, 182 testes
+passam e o contraste é medido em vez de julgado.
 
 ## Licença
 
