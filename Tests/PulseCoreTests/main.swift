@@ -7358,6 +7358,93 @@ func testNotchGlassScrimKeepsCollapsedBarSolidAndFadesExpanded() throws {
     }
 }
 
+func permissionRequestFixture(
+    id: String,
+    summary: String = "swift build",
+    cwd: String = "/Users/example/project",
+    now: Date = Date()
+) -> PermissionRequest {
+    PermissionRequest(
+        id: id, sessionID: "ses_decide", tool: .claude, cwd: cwd,
+        toolName: "Bash", summary: summary, detail: nil, detailKind: .command,
+        suggestions: [], createdAt: now, expiresAt: now.addingTimeInterval(60)
+    )
+}
+
+func testDecisionLogReadsNewestFirstAndSkipsDeferrals() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let log = DecisionLog(fileURL: directory.appendingPathComponent(DecisionLog.fileName))
+
+    log.record(permissionRequestFixture(id: "allowed"), .allow)
+    // Uma deferência não é uma decisão tua: a app saiu da frente porque tinhas
+    // o terminal à vista, e registá-la enterrava as escolhas verdadeiras.
+    log.record(permissionRequestFixture(id: "deferred"), .defer_)
+    log.record(permissionRequestFixture(id: "denied"), .deny)
+
+    let recent = log.recent(limit: 12)
+    try expect(recent.map(\.id), equals: ["denied", "allowed"], "newest first, deferral skipped")
+    try expect(recent.first?.decision, equals: .deny, "decision stored")
+    try expect(recent.first?.projectName, equals: "project", "project resolved when recorded")
+    try expect(log.recent(limit: 1).map(\.id), equals: ["denied"], "limit honored")
+}
+
+func testDecisionLogCompactsPastItsCap() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent(DecisionLog.fileName)
+    let log = DecisionLog(fileURL: fileURL)
+
+    let overflow = 25
+    for index in 0..<(DecisionLog.maximumRecords + overflow) {
+        log.record(permissionRequestFixture(id: "r\(index)"), .allow)
+    }
+
+    let lines = try String(contentsOf: fileURL, encoding: .utf8)
+        .split(separator: "\n", omittingEmptySubsequences: true)
+    try expect(lines.count, equals: DecisionLog.maximumRecords, "file trimmed to the cap")
+    let recent = log.recent(limit: DecisionLog.maximumRecords)
+    try expect(
+        recent.first?.id,
+        equals: "r\(DecisionLog.maximumRecords + overflow - 1)",
+        "newest survives compaction"
+    )
+    try expect(recent.last?.id, equals: "r\(overflow)", "oldest dropped from the head")
+}
+
+func testStateStoreDecisionLandsBesideTheStateDirectory() throws {
+    let rootDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let stateDirectory = rootDirectory.appendingPathComponent("state", isDirectory: true)
+    try FileManager.default.createDirectory(at: stateDirectory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: rootDirectory) }
+    let store = StateStore(repository: StateRepository(directoryURL: stateDirectory))
+
+    store.decide(permissionRequestFixture(id: "logged", summary: "rm -rf build/"), .deny)
+
+    // Ao lado e nunca dentro: o store observa o diretório de estado, e o
+    // repositório tenta descodificar tudo o que lá encontra.
+    try expect(
+        FileManager.default.fileExists(
+            atPath: stateDirectory.appendingPathComponent(DecisionLog.fileName).path
+        ),
+        equals: false,
+        "log stays out of the observed directory"
+    )
+    try expect(
+        FileManager.default.fileExists(
+            atPath: rootDirectory.appendingPathComponent(DecisionLog.fileName).path
+        ),
+        equals: true,
+        "log written next to the state directory"
+    )
+    try expect(store.recentDecisions().map(\.summary), equals: ["rm -rf build/"], "readable back")
+}
+
 extension Data {
     func writeAtomically(to url: URL) throws {
         try FileManager.default.createDirectory(
@@ -7548,6 +7635,9 @@ let tests: [(String, () throws -> Void)] = [
     ("state store clears all session names", testStateStoreClearsAllSessionNames),
     ("state store raises attention only on transitions into red", testStateStoreRaisesAttentionOnlyOnTransitionsIntoRed),
     ("state store raises turn completion only from working to idle", testStateStoreRaisesTurnCompletionOnlyFromWorkingToIdle),
+    ("decision log reads newest first and skips deferrals", testDecisionLogReadsNewestFirstAndSkipsDeferrals),
+    ("decision log compacts past its cap", testDecisionLogCompactsPastItsCap),
+    ("state store decision lands beside the state directory", testStateStoreDecisionLandsBesideTheStateDirectory),
 ]
 
 if CommandLine.arguments.count == 3,

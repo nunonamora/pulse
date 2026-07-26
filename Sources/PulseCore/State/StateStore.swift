@@ -84,11 +84,37 @@ public final class StateStore {
 
     private var broker: PermissionBroker { PermissionBroker(stateDirectory: repository.directoryURL) }
 
+    /// O registo do que decidiste, ao lado do diretório de estado e nunca lá
+    /// dentro — a mesma razão dos nomes das sessões: este store observa esse
+    /// diretório, e escrever nele a cada decisão punha-o a recarregar por causa
+    /// da própria escrita.
+    ///
+    /// Derivado do repositório em vez de injetado como o `nameOverridesFileURL`:
+    /// aquele é uma escolha da app, este é uma consequência de `decide` — se
+    /// fosse opcional, bastava alguém esquecer-se de o passar para as decisões
+    /// deixarem de deixar rasto sem ninguém dar por isso.
+    private var decisionLog: DecisionLog {
+        DecisionLog(
+            fileURL: repository.directoryURL
+                .deletingLastPathComponent()
+                .appendingPathComponent(DecisionLog.fileName)
+        )
+    }
+
     /// Responde ao pedido. O hook está a sondar e apanha isto em menos de um
     /// décimo de segundo.
     public func decide(_ request: PermissionRequest, _ decision: PermissionDecision) {
         try? broker.reply(to: request.id, decision: decision)
+        decisionLog.record(request, decision)
         pendingDecisions.removeAll { $0.id == request.id }
+    }
+
+    /// As últimas decisões, para o histórico do painel.
+    ///
+    /// Passa pelo store para que a interface não tenha de saber onde o ficheiro
+    /// mora — quem sabe onde vive o estado é quem o guarda.
+    public func recentDecisions(limit: Int = 12) -> [DecisionRecord] {
+        decisionLog.recent(limit: limit)
     }
 
     /// Reloading is strictly a read: ended sessions are filtered from the UI

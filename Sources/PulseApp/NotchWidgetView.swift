@@ -87,6 +87,15 @@ struct NotchWidgetView: View {
     @State private var decisionClock = Date()
     /// O painel foi aberto por um pedido de permissão? Então é ele que o fecha.
     @State private var openedByDecision = false
+    /// O painel está a mostrar o histórico em vez da lista de sessões.
+    @State private var showsHistory = false
+    /// As decisões lidas do disco, tal como estavam quando abriste o histórico.
+    ///
+    /// Lidas de uma vez e guardadas aqui, e não perguntadas ao store dentro do
+    /// corpo da vista: o corpo redesenha-se dezenas de vezes por segundo — com
+    /// o ponteiro, com o relógio do cartão, com cada recarga de estado — e uma
+    /// leitura de ficheiro em cada um deles era ir ao disco por nada.
+    @State private var decisionHistory: [DecisionRecord] = []
     /// O painel foi aberto pelo teclado e tem o teclado.
     ///
     /// Distinto de estar aberto: aberto com o rato, o painel não é key e as
@@ -103,8 +112,11 @@ struct NotchWidgetView: View {
             acknowledgments: store.acknowledgments
         )
         // Uma decisão pendente segura o painel: escondê-lo deixava um agente
-        // parado sem nada visível a dizê-lo.
-        let shouldHide = summary.activeSessionCount == 0 && hideWhenEmpty && !store.hasPendingDecision
+        // parado sem nada visível a dizê-lo. O histórico aberto segura-o pela
+        // mesma ordem de razões: estás a ler, e a última sessão a acabar não é
+        // motivo para o painel desaparecer debaixo dos olhos.
+        let shouldHide = summary.activeSessionCount == 0 && hideWhenEmpty
+            && !store.hasPendingDecision && !showsHistory
         let leftEntries = summary.visibleEntries.filter { $0.kind != .blocked }
         let rightEntries = summary.visibleEntries.filter { $0.kind == .blocked }
         let showsIdleMark = summary.activeSessionCount == 0
@@ -219,6 +231,14 @@ struct NotchWidgetView: View {
                         .onReceive(
                             Timer.publish(every: 1, on: .main, in: .common).autoconnect()
                         ) { decisionClock = $0 }
+                    } else if isExpanded, showsHistory {
+                        // A seguir ao cartão e não à frente dele: um pedido por
+                        // responder tem um agente parado do outro lado, e nada
+                        // no painel o pode tapar — muito menos o que já passou.
+                        DecisionHistoryCard(records: decisionHistory)
+                            .frame(width: menuContentWidth)
+                            .frame(width: menuWidth, alignment: .center)
+                            .transition(.opacity)
                     } else if isExpanded {
                         SessionMenuCard(
                             sessions: store.sessions,
@@ -364,6 +384,14 @@ struct NotchWidgetView: View {
             if isVisible, !reduceMotion {
                 rippleTrigger += 1
             }
+            // Cada abertura começa na lista, e não onde a anterior ficou: abre-se
+            // o painel para ver quem está a trabalhar, e reabri-lo no histórico
+            // punha o caso raro à frente do de todos os dias.
+            //
+            // No abrir e não no fechar, de propósito: trocar o conteúdo enquanto
+            // a bolha encolhe fazia a lista piscar por cima do histórico a meio
+            // da animação de saída.
+            if isVisible { showsHistory = false }
             publishInteractiveRegion(
                 compactFrame: compactInteractiveFrame,
                 measuredContentHeight: latestMeasuredContentHeight,
@@ -396,8 +424,10 @@ struct NotchWidgetView: View {
         }
         .onChange(of: store.sessions.isEmpty) { _, isNowEmpty in
             // Uma decisão pendente sobrevive à lista esvaziar: o pedido é a
-            // única coisa no painel e fechá-lo perdia-o.
-            if isNowEmpty, !store.hasPendingDecision { collapseMenu() }
+            // única coisa no painel e fechá-lo perdia-o. O histórico também: o
+            // que ele mostra não depende de haver sessões vivas, e fechar-lhe o
+            // painel na cara só porque a última acabou era arrancar-te da leitura.
+            if isNowEmpty, !store.hasPendingDecision, !showsHistory { collapseMenu() }
         }
         .onChange(of: store.hasPendingDecision) { _, isPending in
             presentPendingDecision(isPending)
@@ -512,7 +542,10 @@ struct NotchWidgetView: View {
     ) -> some View {
         HStack(spacing: 0) {
             HStack(spacing: 6) {
-                Text("Active sessions")
+                // O cabeçalho diz sempre o que está por baixo dele. Deixá-lo em
+                // "Active sessions" com o histórico aberto era assinar a lista
+                // errada, e o número ao lado ficava a contar outra coisa.
+                Text(showsHistory ? "Recent decisions" : "Active sessions")
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.55))
                 Spacer(minLength: 0)
@@ -526,11 +559,25 @@ struct NotchWidgetView: View {
                 .frame(width: layout.notchWidth, height: layout.height)
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
-                Text(sessionCount, format: .number)
+                Text(showsHistory ? decisionHistory.count : sessionCount, format: .number)
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(.white.opacity(0.35))
-                SettingsGearButton {
+                // O histórico mora aqui, e não nas definições: é a mesma coisa
+                // que a lista — o que os teus agentes andaram a fazer —, só que
+                // no passado. Trocar a lista por ele no mesmo painel guarda
+                // essa parecença; uma janela à parte perdia-a.
+                HeaderIconButton(
+                    systemImage: "clock.arrow.circlepath",
+                    accessibilityLabel: showsHistory
+                        ? "Show active sessions" : "Show decision history",
+                    isActive: showsHistory,
+                    action: toggleHistory
+                )
+                // A porta visível para a janela de Definições; o menu do clique
+                // direito na silhueta fica como alternativa para quando não há
+                // sessões nenhumas e nenhum menu abre.
+                HeaderIconButton(systemImage: "gearshape", accessibilityLabel: "Pulse settings") {
                     // The settings window is a normal app window: activate
                     // first so it opens frontmost and key — the notch panel
                     // itself never takes that role.
@@ -605,6 +652,25 @@ struct NotchWidgetView: View {
         )
         onInteractiveRegionChange(region)
     }
+
+    /// Troca a lista pelo histórico, e lê o ficheiro na troca.
+    ///
+    /// Ler aqui e só aqui é o que garante que cada abertura mostra o que está
+    /// no disco naquele momento — incluindo a decisão que tomaste há dez
+    /// segundos — sem que a vista ande a sondar o ficheiro enquanto está
+    /// fechada, que é o tempo quase todo.
+    private func toggleHistory() {
+        if !showsHistory {
+            decisionHistory = store.recentDecisions(limit: Self.historyLength)
+        }
+        withAnimation(.easeOut(duration: 0.18)) {
+            showsHistory.toggle()
+        }
+    }
+
+    /// Uma dúzia: o suficiente para reencontrar a decisão de que te lembras
+    /// vagamente, e pouco para caber num painel que também tem de caber no ecrã.
+    private static let historyLength = 12
 
     private func collapseMenu() {
         hoverExpandWorkItem?.cancel()
@@ -1538,24 +1604,165 @@ private struct SessionRow: View {
     }
 }
 
-/// The visible route into the native Settings window, living in the expanded
-/// bar's right wing; the silhouette's right-click menu stays as the fallback
-/// for when no sessions exist and no menu can open.
-private struct SettingsGearButton: View {
+// MARK: - Histórico de decisões
+
+/// O que autorizaste e o que recusaste, do mais recente para trás.
+///
+/// Ocupa o lugar da lista de sessões, com as mesmas margens e o mesmo teto de
+/// altura: é a mesma gaveta a mostrar outra coisa, e não um segundo painel.
+private struct DecisionHistoryCard: View {
+    let records: [DecisionRecord]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SessionMenuLayout.cardStackSpacing) {
+            if records.isEmpty {
+                // O vazio diz o que o vai encher, como o "Nothing running" da
+                // lista: quem chega aqui antes da primeira decisão fica a saber
+                // que a app não está avariada, está só à espera.
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("No decisions yet")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.7))
+                    Text("Allow or deny a permission request and it lands here.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.52))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 12)
+            } else {
+                ScrollView(showsIndicators: false) {
+                    // `VStack` e não `LazyVStack`, pela mesma razão da lista: são
+                    // uma dúzia de linhas, e uma pilha normal desenha-se fora de
+                    // ecrã — o que permite retratá-la sem depender do ecrã.
+                    VStack(spacing: 0) {
+                        ForEach(records) { DecisionHistoryRow(record: $0) }
+                    }
+                }
+                .frame(height: SessionMenuLayout.decisionListHeight(recordCount: records.count))
+                .padding(.bottom, SessionMenuLayout.sessionListBottomPadding)
+            }
+        }
+        .padding(.horizontal, SessionMenuLayout.contentHorizontalInset)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, SessionMenuLayout.listTopPadding)
+        .padding(.bottom, SessionMenuLayout.cardBottomPadding)
+    }
+}
+
+/// Uma decisão numa linha: quem pediu, o quê, o que respondeste e há quanto
+/// tempo.
+///
+/// Sem fundo de hover e sem ação nenhuma, ao contrário das linhas de sessão:
+/// não há nada para fazer a uma decisão já tomada, e desenhá-la como se houvesse
+/// prometia um clique que não existe.
+private struct DecisionHistoryRow: View {
+    let record: DecisionRecord
+    @Environment(\.isStaticRender) private var isStaticRender
+
+    var body: some View {
+        HStack(spacing: 12) {
+            AgentIconView(tool: record.tool)
+            // O resumo cortado à largura da linha e não a um número de letras:
+            // é a frase que identifica a decisão, e o veredicto à direita é que
+            // não pode ceder espaço nenhum.
+            Text(record.summary)
+                .font(.system(size: 12.5))
+                .foregroundStyle(.white.opacity(0.82))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 8)
+            // Verde e vermelho, a mesma dupla dos pontos de estado: aqui o
+            // vermelho continua a querer dizer "parei o agente".
+            Text(record.decision.verdictLabel)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(record.decision.verdictColor.opacity(0.9))
+            // O sistema acorda esta vista às voltas do minuto enquanto ela está
+            // no ecrã — sem temporizadores, e sem nada a girar com o painel
+            // fechado.
+            Group {
+                if isStaticRender {
+                    elapsed(to: Date())
+                } else {
+                    TimelineView(.everyMinute) { context in elapsed(to: context.date) }
+                }
+            }
+        }
+        .padding(.leading, SessionMenuLayout.sessionRowLeadingInset)
+        // 12 e não 10: põe a coluna do tempo a acabar onde acaba o botão de
+        // ação das linhas de sessão — e onde acabam os botões do cabeçalho —,
+        // por isso a margem direita do painel não muda ao trocar de vista.
+        .padding(.trailing, 12)
+        .frame(height: SessionMenuLayout.decisionRowHeight)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            "\(record.toolName) \(record.decision.verdictLabel), \(record.summary), in \(record.projectName)"
+        )
+    }
+
+    private func elapsed(to date: Date) -> some View {
+        Text(SessionDurationFormatter.string(from: record.decidedAt, to: date))
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(.white.opacity(0.45))
+            // A mesma coluna fixa das linhas de sessão: "3m" e "2h 8m" têm
+            // larguras diferentes e sem coluna própria puxavam o veredicto para
+            // posições diferentes em cada linha.
+            .frame(width: 46, alignment: .trailing)
+    }
+}
+
+private extension PermissionDecision {
+    /// O particípio e não o imperativo: "allow" é o botão que carregaste, e o
+    /// que o histórico conta é o que ficou feito.
+    var verdictLabel: String {
+        switch self {
+        case .allow: "allowed"
+        case .allowAlways: "always"
+        case .deny: "denied"
+        case .defer_: "deferred"
+        }
+    }
+
+    /// `defer_` nunca chega ao registo — o `DecisionLog` deixa-o de fora —, mas
+    /// se um dia chegar sai cinzento: não foi uma escolha tua.
+    var verdictColor: Color {
+        switch self {
+        case .allow, .allowAlways: .green
+        case .deny: .red
+        case .defer_: .gray
+        }
+    }
+}
+
+/// Um botão da ala direita do cabeçalho: as definições, o histórico.
+///
+/// Um tipo para os dois, e não um por botão. São o mesmo objeto — um glifo
+/// discreto que acende ao passar o rato — e tê-los escritos em sítios
+/// diferentes era garantir que um dia se afastavam num ponto de opacidade.
+///
+/// Ligado, o glifo fica quase branco e ganha um disco por baixo: um botão que
+/// alterna tem de dizer em qual dos dois estados está, e com hover a 0,75 e
+/// ligado a 0,75 não dizia nada.
+private struct HeaderIconButton: View {
+    let systemImage: String
+    let accessibilityLabel: String
+    var isActive = false
     let action: () -> Void
     @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: "gearshape")
+            Image(systemName: systemImage)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.white.opacity(isHovered ? 0.75 : 0.35))
+                .foregroundStyle(.white.opacity(isActive ? 0.95 : (isHovered ? 0.75 : 0.35)))
                 .frame(width: 22, height: 22)
+                .background(Circle().fill(.white.opacity(isActive ? 0.12 : 0)))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .accessibilityLabel("Pulse settings")
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
@@ -1757,6 +1964,19 @@ enum UIRender {
             width: 800, name: "decision"
         )
 
+        // O histórico com os desfechos que sabe desenhar, para se poder ver o
+        // contraste do verde e do vermelho sem esperar por decisões reais.
+        //
+        // As linhas soltas e não o cartão inteiro, pela mesma razão da lista: o
+        // `ImageRenderer` não desenha o conteúdo de uma `ScrollView`, e o cartão
+        // com registos embrulha-as numa — saía uma moldura vazia.
+        render(
+            VStack(spacing: 0) {
+                ForEach(sampleDecisions(now: now)) { DecisionHistoryRow(record: $0) }
+            },
+            width: 760, name: "history"
+        )
+
         // A barra fechada, com a geometria verdadeira de um ecrã com recorte.
         //
         // Precisa de um `StateStore` a sério — as sessões dele são só de
@@ -1799,6 +2019,27 @@ enum UIRender {
         }
 
         return written.isEmpty ? "não desenhou nada" : "ok: \(written.joined(separator: ", "))"
+    }
+
+    /// Decisões de exemplo, uma por desfecho que o histórico sabe desenhar.
+    private static func sampleDecisions(now: Date) -> [DecisionRecord] {
+        [
+            DecisionRecord(
+                id: "d1", sessionID: "s1", tool: .claude, projectName: "pulse",
+                toolName: "Bash", summary: "swift build -c release",
+                decision: .allow, decidedAt: now.addingTimeInterval(-180)
+            ),
+            DecisionRecord(
+                id: "d2", sessionID: "s2", tool: .codex, projectName: "hermes",
+                toolName: "Bash", summary: "rm -rf build/ && git push --force origin main",
+                decision: .deny, decidedAt: now.addingTimeInterval(-2_700)
+            ),
+            DecisionRecord(
+                id: "d3", sessionID: "s3", tool: .opencode, projectName: "siva",
+                toolName: "Edit", summary: "Escrever Sources/PulseCore/State/StateStore.swift",
+                decision: .allowAlways, decidedAt: now.addingTimeInterval(-9_000)
+            ),
+        ]
     }
 
     /// Sessões de exemplo que cobrem os estados que a lista sabe desenhar.
