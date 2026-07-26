@@ -67,6 +67,13 @@ struct NotchWidgetView: View {
     @State private var decisionClock = Date()
     /// O painel foi aberto por um pedido de permissão? Então é ele que o fecha.
     @State private var openedByDecision = false
+    /// O painel foi aberto pelo teclado e tem o teclado.
+    ///
+    /// Distinto de estar aberto: aberto com o rato, o painel não é key e as
+    /// teclas não lhe chegam. É este estado, e não o `focusable()` da lista,
+    /// que decide se se mostram as pistas ⌘N — mostrá-las quando as teclas não
+    /// chegam lá seria ensinar um atalho que não funciona.
+    @State private var keyboardActive = false
     @State private var outsideClickMonitor: Any?
     @State private var latestMeasuredContentHeight: CGFloat = 0
 
@@ -202,6 +209,7 @@ struct NotchWidgetView: View {
                             overrideName: { store.nameOverrides.displayName(for: $0) },
                             rename: { store.rename($0, to: $1) },
                             setKeyboardFocus: onKeyboardFocusChange,
+                            keyboardActive: keyboardActive,
                             onRowInteractionChange: { isActive in
                                 rowInteractionActive = isActive
                                 if isActive {
@@ -385,6 +393,7 @@ struct NotchWidgetView: View {
                 // Ativar a app é o que permite ao painel receber teclas. Sem
                 // isto abria mudo: via-se a lista e não se podia lá mexer.
                 NSApp.activate(ignoringOtherApps: true)
+                keyboardActive = true
                 onKeyboardFocusChange(true)
                 openMenu()
             }
@@ -582,6 +591,16 @@ struct NotchWidgetView: View {
         hoverExpandWorkItem = nil
         cancelPendingCollapse()
         isExpanded = false
+        // Largar o teclado ao fechar.
+        //
+        // O painel é key enquanto o atalho o tem aberto. Se ficasse key depois
+        // de fechar, continuava a comer as teclas da app que está por baixo —
+        // e ninguém liga um painel invisível ao facto de estar a escrever para
+        // o vazio.
+        if keyboardActive {
+            keyboardActive = false
+            onKeyboardFocusChange(false)
+        }
     }
 
     private func cancelPendingCollapse() {
@@ -909,20 +928,42 @@ private struct SessionMenuCard: View {
     let overrideName: (AgentSession) -> String?
     let rename: (AgentSession, String) -> Void
     let setKeyboardFocus: (Bool) -> Void
+    /// O painel tem mesmo o teclado. Sem isto, o `focusable()` da lista dizia
+    /// que sim mesmo com o painel aberto pelo rato, que nunca é key.
+    let keyboardActive: Bool
     let onRowInteractionChange: (Bool) -> Void
     @State private var errorMessage: String?
     // At most one row shows its inline actions; opening another closes it.
     @State private var actionsSessionID: String?
+    /// A linha sob o teclado.
+    ///
+    /// Separada do hover de propósito: o rato e o teclado podem estar em
+    /// linhas diferentes, e obrigar um a seguir o outro faz a lista saltar
+    /// debaixo dos dedos de quem está a escrever.
+    @State private var selectedID: String?
+    /// `focusable()` torna a lista elegível para foco; não lho dá. Sem pedir o
+    /// foco explicitamente, o painel abria pelo atalho e as teclas iam parar a
+    /// lado nenhum — o painel era key, mas dentro dele ninguém escutava.
+    @FocusState private var listFocused: Bool
     @State private var branchCoordinator = GitBranchResolutionCoordinator()
 
     var body: some View {
         VStack(alignment: .leading, spacing: SessionMenuLayout.cardStackSpacing) {
             if sessions.isEmpty {
-                Text("No active sessions")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.45))
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 12)
+                // Um ecrã vazio diz o que fazer a seguir. "No active sessions"
+                // descrevia o nada e deixava quem chega aqui pela primeira vez
+                // sem saber se a app está avariada ou apenas à espera.
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Nothing running")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.7))
+                    Text("Start Claude, Codex or OpenCode in a terminal and it shows up here.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.42))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 12)
             } else {
                 // The list owns the extra height from inline actions. Once
                 // several sessions are visible it scrolls instead of growing
@@ -948,6 +989,12 @@ private struct SessionMenuCard: View {
                             }
                         }
                     }
+                    .onChange(of: selectedID) { _, sessionID in
+                        guard let sessionID else { return }
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            proxy.scrollTo(sessionID, anchor: .center)
+                        }
+                    }
                 }
                 .padding(.bottom, SessionMenuLayout.sessionListBottomPadding)
             }
@@ -964,9 +1011,57 @@ private struct SessionMenuCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, SessionMenuLayout.listTopPadding)
         .padding(.bottom, SessionMenuLayout.cardBottomPadding)
+        // Conduzir a lista sem tocar no rato.
+        //
+        // O atalho global abria o painel com foco de teclado e não havia nada
+        // para conduzir com ele: via-se a lista e a única forma de lá mexer era
+        // ir buscar o rato — que é exatamente o que o atalho existe para
+        // evitar. Setas movem, Enter salta para o terminal, Escape fecha.
+        .focusable()
+        .focused($listFocused)
+        .onKeyPress(.upArrow) { move(-1); return .handled }
+        .onKeyPress(.downArrow) { move(1); return .handled }
+        .onKeyPress(.return) { activateSelection(); return .handled }
+        .onKeyPress(.escape) { dismiss(); return .handled }
+        // ⌘1..9 salta direto, sem contar setas. Acima de nove sessões deixa de
+        // haver dígito, e a essa altura as setas são mais rápidas de qualquer
+        // maneira.
+        .onKeyPress(characters: .decimalDigits, phases: .down) { press in
+            guard press.modifiers.contains(.command),
+                  let digit = Int(String(press.characters)), digit >= 1,
+                  digit <= min(9, sessions.count)
+            else { return .ignored }
+            selectedID = sessions[digit - 1].id
+            activateSelection()
+            return .handled
+        }
+        // Abrir já com a primeira escolhida: sem isto a primeira seta não
+        // move, escolhe — e quem carrega em Enter à espera de saltar não salta.
+        .onAppear {
+            if selectedID == nil { selectedID = sessions.first?.id }
+            if keyboardActive { listFocused = true }
+        }
+        .onChange(of: keyboardActive) { _, active in listFocused = active }
+        .onChange(of: sessions.map(\.id)) { _, ids in
+            if let selectedID, !ids.contains(selectedID) { self.selectedID = ids.first }
+        }
         // The whole panel can collapse while a row interaction is open;
         // the interaction lock must not outlive the card.
         .onDisappear { onRowInteractionChange(false) }
+    }
+
+    private func move(_ delta: Int) {
+        guard !sessions.isEmpty else { return }
+        let current = sessions.firstIndex { $0.id == selectedID } ?? -1
+        // Sem dar a volta: numa lista curta, saltar do fim para o princípio
+        // perde-se de vista e obriga a reencontrar onde se está.
+        let next = min(max(current + delta, 0), sessions.count - 1)
+        selectedID = sessions[next].id
+    }
+
+    private func activateSelection() {
+        guard let session = sessions.first(where: { $0.id == selectedID }) else { return }
+        focusSession(session)
     }
 
     private func row(for session: AgentSession) -> some View {
@@ -975,6 +1070,8 @@ private struct SessionMenuCard: View {
             title: sessionTitle(session),
             renamePrefill: overrideName(session) ?? "",
             isActionsExpanded: actionsSessionID == session.id,
+            isSelected: selectedID == session.id,
+            shortcutDigit: shortcutDigit(for: session),
             toggleActions: { toggleActions(for: session) },
             focus: focusSession,
             rename: rename,
@@ -982,6 +1079,14 @@ private struct SessionMenuCard: View {
             setKeyboardFocus: setKeyboardFocus,
             branchCoordinator: branchCoordinator
         )
+    }
+
+    /// Só as nove primeiras, e só com o teclado a mandar.
+    private func shortcutDigit(for session: AgentSession) -> Int? {
+        guard keyboardActive, listFocused, let index = sessions.firstIndex(where: { $0.id == session.id }),
+              index < 9
+        else { return nil }
+        return index + 1
     }
 
     private func toggleActions(for session: AgentSession) {
@@ -1035,6 +1140,12 @@ private struct SessionRow: View {
     let title: String
     let renamePrefill: String
     let isActionsExpanded: Bool
+    /// Escolhida pelo teclado. Desenha-se como o hover porque é a mesma ideia
+    /// — "é esta" — e duas linguagens para a mesma ideia obrigavam a aprender
+    /// duas.
+    let isSelected: Bool
+    /// O dígito de ⌘N desta linha, ou nada quando o teclado não manda na lista.
+    let shortcutDigit: Int?
     let toggleActions: () -> Void
     let focus: (AgentSession) -> Void
     let rename: (AgentSession, String) -> Void
@@ -1088,12 +1199,12 @@ private struct SessionRow: View {
                 .fill(
                     isActionsExpanded
                         ? Color.black.opacity(0.55)
-                        : Color.white.opacity(isHovered ? 0.05 : 0)
+                        : Color.white.opacity(isHovered || isSelected ? 0.05 : 0)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(
-                            .white.opacity(isHovered || isActionsExpanded ? 0.12 : 0),
+                            .white.opacity(isHovered || isSelected || isActionsExpanded ? 0.12 : 0),
                             lineWidth: 0.5
                         )
                 )
@@ -1160,6 +1271,23 @@ private struct SessionRow: View {
                 .lineLimit(1)
             }
             Spacer(minLength: 8)
+            // O número do atalho, só enquanto o teclado tem a lista.
+            //
+            // Ensina ⌘N exatamente quando ele serve, e desaparece assim que se
+            // pega no rato. Uma legenda fixa no rodapé dizia o mesmo, ocupava
+            // altura para sempre e continuava a ser lida por ninguém.
+            if let shortcutDigit {
+                Text("⌘\(shortcutDigit)")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.42))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4).fill(.white.opacity(0.08))
+                    )
+                    .transition(.opacity)
+                    .accessibilityHidden(true)
+            }
             // The system wakes this view on minute boundaries while the
             // row is on screen — no timers, no polling while collapsed.
             TimelineView(.everyMinute) { context in
