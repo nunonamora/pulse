@@ -1189,10 +1189,23 @@ private struct SessionRow: View {
     /// nothing ever floats outside the notch silhouette.
     private enum ActionMode { case menu, renaming, confirmingKill }
 
+    /// Quanto tempo o "Copied" fica no lugar do rótulo. Curto o bastante para
+    /// não parecer que a linha ficou presa, longo o bastante para ser lido por
+    /// quem olhou para o outro lado no instante do clique.
+    private static let copyFeedbackDuration: TimeInterval = 1.2
+
     @State private var isHovered = false
     @State private var branchName: String?
     @State private var mode: ActionMode = .menu
     @State private var renameDraft = ""
+    /// O feedback da cópia vive aqui, na linha, pela mesma razão que o
+    /// `confirmingKill`: é a resposta a um gesto desta linha e ninguém de fora
+    /// ganha nada em saber que aconteceu.
+    @State private var didCopyPath = false
+    /// Cada cópia carimba o seu temporizador. Sem carimbo, fechar e reabrir a
+    /// linha dentro do segundo de feedback deixava o temporizador da cópia
+    /// anterior fechar um menu que o utilizador tinha acabado de abrir.
+    @State private var copyFeedbackStamp = 0
     @FocusState private var renameFieldIsFocused: Bool
 
     var body: some View {
@@ -1254,6 +1267,10 @@ private struct SessionRow: View {
         .onChange(of: isActionsExpanded) { _, _ in
             endRenameKeyboard()
             mode = .menu
+            // A linha que reabre começa limpa, e o carimbo novo tira o comando
+            // ao temporizador de uma cópia que já não interessa a ninguém.
+            didCopyPath = false
+            copyFeedbackStamp &+= 1
         }
         .onDisappear { endRenameKeyboard() }
         // Lazy rows request branch data only while visible. Disappearance
@@ -1392,10 +1409,14 @@ private struct SessionRow: View {
                 ActionListRow(label: "Rename Session", systemImage: "pencil") {
                     beginRename()
                 }
-                ActionListRow(label: "Copy Project Path", systemImage: "doc.on.doc") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(session.cwd, forType: .string)
-                    toggleActions()
+                // O rótulo é a própria confirmação. Copiar não deixa rasto
+                // visível em lado nenhum, e sem esta troca ficava sempre a
+                // dúvida de se o clique chegou a valer alguma coisa.
+                ActionListRow(
+                    label: didCopyPath ? "Copied" : "Copy Project Path",
+                    systemImage: didCopyPath ? "checkmark" : "doc.on.doc"
+                ) {
+                    copyProjectPath()
                 }
                 ActionListRow(label: "Reveal in Finder", systemImage: "folder") {
                     NSWorkspace.shared.activateFileViewerSelecting(
@@ -1467,6 +1488,27 @@ private struct SessionRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    /// Copia a diretoria do projeto e só depois arruma a linha.
+    ///
+    /// As outras ações fecham o menu no mesmo instante em que agem, e nesta
+    /// isso apagava a confirmação no fotograma em que ela nascia — copiar não
+    /// tem consequência visível nenhuma para servir de recibo. Por isso o
+    /// "Copied" fica primeiro e o fecho vem a seguir, já com a resposta dada.
+    private func copyProjectPath() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(session.cwd, forType: .string)
+        didCopyPath = true
+        copyFeedbackStamp &+= 1
+        let stamp = copyFeedbackStamp
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.copyFeedbackDuration) {
+            // Só o disparo mais recente manda: qualquer abrir ou fechar pelo
+            // meio já invalidou este carimbo.
+            guard copyFeedbackStamp == stamp else { return }
+            didCopyPath = false
+            toggleActions()
+        }
     }
 
     private func beginRename() {
