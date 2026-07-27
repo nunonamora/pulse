@@ -1369,6 +1369,8 @@ private struct SessionRow: View {
     @State private var branchName: String?
     /// A última medição de contexto, lida da cauda do transcript.
     @State private var contextReading: ContextMeter.Reading?
+    /// Subagentes vivos: tool_use da Task sem o seu tool_result.
+    @State private var liveSubagents = 0
     @State private var mode: ActionMode = .menu
     @State private var renameDraft = ""
     /// O feedback da cópia vive aqui, na linha, pela mesma razão que o
@@ -1451,11 +1453,13 @@ private struct SessionRow: View {
         // is discarded on close so a later open sees branch switches.
         .task(id: session.updatedAt) { [path = session.transcriptPath] in
             guard let path else { return }
-            let reading = await Task.detached(priority: .utility) {
-                ContextMeter.reading(transcriptPath: path)
+            let (reading, subagents) = await Task.detached(priority: .utility) {
+                (ContextMeter.reading(transcriptPath: path),
+                 SubagentMeter.liveCount(transcriptPath: path))
             }.value
             guard !Task.isCancelled else { return }
             contextReading = reading
+            liveSubagents = subagents
         }
         .task(id: session.currentStep == nil ? session.cwd : nil) { [cwd = session.cwd] in
             branchName = nil
@@ -1539,6 +1543,18 @@ private struct SessionRow: View {
                         Image(systemName: "arrow.triangle.branch")
                             .font(.system(size: 9, weight: .semibold))
                         Text(branch)
+                            .font(.system(size: 11, design: .monospaced))
+                    }
+                    // Subagentes vivos: só aparecem enquanto existem, e só
+                    // numa sessão a trabalhar — depois do turno acabar o
+                    // número seria arqueologia, não estado.
+                    if liveSubagents > 0, session.status == .working {
+                        if showsFolder || session.currentStep != nil || branchName != nil {
+                            Text("·")
+                        }
+                        Image(systemName: "person.2")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text("\(liveSubagents) subagent\(liveSubagents == 1 ? "" : "s")")
                             .font(.system(size: 11, design: .monospaced))
                     }
                 }

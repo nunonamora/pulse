@@ -7640,6 +7640,7 @@ let tests: [(String, () throws -> Void)] = [
     ("state store decision lands beside the state directory", testStateStoreDecisionLandsBesideTheStateDirectory),
     ("context meter reads the newest usage from the tail", testContextMeterReadsLatestUsageFromTail),
     ("plan usage sums only the five-hour window", testPlanUsageSumsOnlyTheWindow),
+    ("subagent meter counts only unfinished tasks", testSubagentMeterCountsOnlyUnfinishedTasks),
 ]
 
 if CommandLine.arguments.count == 3,
@@ -7726,4 +7727,23 @@ func testPlanUsageSumsOnlyTheWindow() throws {
     // 2 × (100 novos + 50 cache criada) + 200 + 300; a cache LIDA fica de fora.
     try expect(burn.tokens, equals: 800, "tokens sum input+created+output, never cache reads")
     try expect(burn.sessions, equals: 1, "one contributing session")
+}
+
+func testSubagentMeterCountsOnlyUnfinishedTasks() throws {
+    let path = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString + ".jsonl").path
+    defer { try? FileManager.default.removeItem(atPath: path) }
+    let lines = [
+        // Um Task terminado (uso + resultado), um vivo, e um tool_use de outra
+        // ferramenta que nunca deve contar.
+        #"{"message":{"content":[{"type":"tool_use","id":"t1","name":"Task"}]}}"#,
+        #"{"message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}"#,
+        #"{"message":{"content":[{"type":"tool_use","id":"t2","name":"Task"}]}}"#,
+        #"{"message":{"content":[{"type":"tool_use","id":"b1","name":"Bash"}]}}"#,
+    ]
+    try (lines.joined(separator: "\n") + "\n").write(toFile: path, atomically: true, encoding: .utf8)
+    try expect(SubagentMeter.liveCount(transcriptPath: path), equals: 1,
+               "one Task without its result is one live subagent")
+    try expect(SubagentMeter.liveCount(transcriptPath: "/nonexistent/x.jsonl"), equals: 0,
+               "missing transcript means zero, not unknown")
 }
