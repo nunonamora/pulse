@@ -1037,7 +1037,10 @@ private struct ContextGauge: View {
 private struct WorkingPixelSpinner: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isStaticRender) private var isStaticRender
-    private static let stepInterval: TimeInterval = 0.08
+    /// 0,1 s por fotograma. Estava a 0,08 — a diferença é invisível num
+    /// glifo braille de 11 pt, e são menos 25% de acordares por segundo num
+    /// spinner que passa o dia ligado.
+    private static let stepInterval: TimeInterval = 0.1
     private static let frames: [Character] = Array("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
     var body: some View {

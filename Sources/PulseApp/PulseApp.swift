@@ -123,7 +123,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Pré-aquecer só agora: a primeira frase do dia chega uns 300 ms
             // atrasada com o sintetizador frio, e desencontrava-se do som de
             // assinatura que a antecede.
-            Voice.shared.prewarm()
+            // Só com a voz ligada: pré-aquecer o sintetizador acorda a pilha
+            // de áudio (thread AXSpeech incluída) para uma voz que o
+            // utilizador desligou.
+            if Voice.shared.isEnabled { Voice.shared.prewarm() }
             // O atalho global. Registado depois do painel existir, para o
             // primeiro toque já encontrar alguém a quem falar.
             if UserDefaults.standard.object(forKey: "hotkeyEnabled") as? Bool ?? true {

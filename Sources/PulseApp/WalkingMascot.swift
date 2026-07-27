@@ -44,7 +44,12 @@ struct WalkingMascot: View {
                 .frame(width: runway, alignment: .center)
                 .accessibilityHidden(true)
         } else {
-            TimelineView(.periodic(from: .now, by: 1.0 / 30)) { timeline in
+            // 10 fps, não 30. O passeio anda a ~5 pt/s — meio ponto por
+            // fotograma a 10 fps, que nenhum olho distingue de contínuo — e o
+            // passo troca a cada 0,16 s de qualquer maneira. A 30 fps este
+            // TimelineView era o maior consumidor de CPU da app inteira:
+            // medido, a barra com mascote custava 10,8% contra 3,4% parada.
+            TimelineView(.periodic(from: .now, by: 1.0 / 10)) { timeline in
                 let t = timeline.date.timeIntervalSinceReferenceDate
                 // Onda triangular: 0 → 1 → 0, sem salto nas pontas.
                 let cycle = (t / Self.crossing).truncatingRemainder(dividingBy: 2)

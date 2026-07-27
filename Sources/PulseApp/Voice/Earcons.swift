@@ -54,6 +54,28 @@ final class Earcons {
         let buffer = cache[key] ?? render(notes(tool, state))
         cache[key] = buffer
         player.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
+        scheduleShutdown()
+    }
+
+    /// Para o motor quando o som acaba.
+    ///
+    /// Um AVAudioEngine ligado mantém a thread de IO de áudio a rodar à
+    /// cadência dos buffers — para sempre, a tocar silêncio. Foi encontrado na
+    /// amostragem de CPU em repouso: a app "parada" gastava 2,5% por causa
+    /// disto. Dois segundos depois do último earcon, o motor desliga; o
+    /// próximo `start()` religa em milissegundos, muito abaixo do ataque de
+    /// qualquer nota.
+    private var shutdownGeneration = 0
+
+    private func scheduleShutdown() {
+        shutdownGeneration += 1
+        let generation = shutdownGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            guard let self, self.shutdownGeneration == generation, self.running else { return }
+            self.player.stop()
+            self.engine.stop()
+            self.running = false
+        }
     }
 
     private func notes(_ tool: AgentTool, _ state: EarconState) -> [Double] {
