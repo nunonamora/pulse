@@ -1043,8 +1043,10 @@ private struct WorkingPixelSpinner: View {
     private static let stepInterval: TimeInterval = 0.1
     private static let frames: [Character] = Array("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
+    private var displayActivity = DisplayActivity.shared
+
     var body: some View {
-        if reduceMotion || isStaticRender {
+        if reduceMotion || isStaticRender || !displayActivity.isWatchable {
             frame(Self.frames[0])
         } else {
             TimelineView(.periodic(from: .now, by: Self.stepInterval)) { timeline in
