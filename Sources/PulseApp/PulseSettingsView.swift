@@ -15,6 +15,7 @@ struct PulseSettingsView: View {
     @AppStorage("voiceUseSystem") private var voiceUseSystem = false
     @AppStorage("screenSelectionMode") private var screenSelectionMode = ScreenSelectionMode.pointer.rawValue
     @AppStorage("hotkeyEnabled") private var hotkeyEnabled = true
+    @AppStorage("soundStyle") private var soundStyle = "chime"
     @AppStorage("skipDecisionWhenTerminalVisible")
     private var skipDecisionWhenTerminalVisible = true
     @AppStorage("glassFrostRadiusNotch") private var notchFrostRadius = NotchGlassStyle.defaultFrostRadius
@@ -82,6 +83,20 @@ struct PulseSettingsView: View {
             }
 
             Section("Sounds") {
+                Picker("Sound style", selection: $soundStyle) {
+                    Text("Chimes").tag("chime")
+                    Text("Chiptune (8-bit)").tag("chiptune")
+                }
+                .pickerStyle(.segmented)
+                Button("Open custom sounds folder…") {
+                    let dir = SoundPackResolver.defaultDirectory()
+                    try? FileManager.default.createDirectory(
+                        at: dir, withIntermediateDirectories: true)
+                    NSWorkspace.shared.activateFileViewerSelecting([dir])
+                }
+                Text("Drop files named like needs-decision.wav or claude-done.aiff there and they replace the synthesized sounds. Missing files fall back to synthesis.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
                 Toggle("Play the alert sound when a session needs you", isOn: $attentionSoundEnabled)
                 Toggle("Play a soft sound when a session finishes its turn", isOn: $turnCompleteSoundEnabled)
             }

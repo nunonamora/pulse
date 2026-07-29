@@ -7641,6 +7641,7 @@ let tests: [(String, () throws -> Void)] = [
     ("context meter reads the newest usage from the tail", testContextMeterReadsLatestUsageFromTail),
     ("plan usage sums only the five-hour window", testPlanUsageSumsOnlyTheWindow),
     ("subagent meter counts only unfinished tasks", testSubagentMeterCountsOnlyUnfinishedTasks),
+    ("sound pack resolver prefers tool-specific files", testSoundPackResolverPrefersToolSpecificFiles),
 ]
 
 if CommandLine.arguments.count == 3,
@@ -7746,4 +7747,22 @@ func testSubagentMeterCountsOnlyUnfinishedTasks() throws {
                "one Task without its result is one live subagent")
     try expect(SubagentMeter.liveCount(transcriptPath: "/nonexistent/x.jsonl"), equals: 0,
                "missing transcript means zero, not unknown")
+}
+
+func testSoundPackResolverPrefersToolSpecificFiles() throws {
+    let dir = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    try Data().write(to: dir.appendingPathComponent("done.wav"))
+    try Data().write(to: dir.appendingPathComponent("claude-done.aiff"))
+
+    let specific = SoundPackResolver.resolve(tool: "claude", event: "done", in: dir)
+    try expect(specific?.lastPathComponent, equals: "claude-done.aiff",
+               "tool-specific file wins over the generic one")
+    let generic = SoundPackResolver.resolve(tool: "codex", event: "done", in: dir)
+    try expect(generic?.lastPathComponent, equals: "done.wav",
+               "other tools fall back to the generic file")
+    try expect(SoundPackResolver.resolve(tool: "codex", event: "failed", in: dir) == nil,
+               equals: true, "missing event resolves to synthesis")
 }

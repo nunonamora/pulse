@@ -47,14 +47,43 @@ final class Earcons {
         }
     }
 
+    /// O estilo da síntese. "chime" são os senos de duas notas; "chiptune" é
+    /// onda quadrada com ataque de ruído — o vocabulário 8-bit do Vibe Island,
+    /// sintetizado da mesma maneira que o resto: sem ficheiros de áudio.
+    private var style: String {
+        UserDefaults.standard.string(forKey: "soundStyle") ?? "chime"
+    }
+
     func play(tool: AgentTool, state: EarconState) {
+        // Um pack do utilizador ganha a tudo: é a personalização mais
+        // explícita que existe — ele pôs lá o ficheiro.
+        if let packed = SoundPackResolver.resolve(
+            tool: tool.rawValue, event: eventName(state)
+        ) {
+            packPlayer = try? AVAudioPlayer(contentsOf: packed)
+            packPlayer?.volume = 0.7
+            packPlayer?.play()
+            return
+        }
         start()
         guard running else { return }
-        let key = "\(tool.rawValue)-\(state)"
+        let key = "\(tool.rawValue)-\(state)-\(style)"
         let buffer = cache[key] ?? render(notes(tool, state))
         cache[key] = buffer
         player.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
         scheduleShutdown()
+    }
+
+    /// Mantido vivo enquanto toca; o AVAudioPlayer morre se ninguém o segurar.
+    private var packPlayer: AVAudioPlayer?
+
+    private func eventName(_ state: EarconState) -> String {
+        switch state {
+        case .done:          return "done"
+        case .needsDecision: return "needs-decision"
+        case .waiting:       return "waiting"
+        case .failed:        return "failed"
+        }
     }
 
     /// Para o motor quando o som acaba.
@@ -112,14 +141,27 @@ final class Earcons {
         guard let channel = buffer.floatChannelData?[0] else { return buffer }
 
         let attack = Int(sampleRate * 0.008)
+        let chiptune = style == "chiptune"
         for (index, frequency) in notes.enumerated() {
             let offset = index * perNote
             for i in 0..<perNote {
                 let t = Double(i) / sampleRate
                 let progress = Double(i) / Double(perNote)
-                let wave = sin(2 * .pi * frequency * t) + 0.18 * sin(4 * .pi * frequency * t)
+                let wave: Double
+                if chiptune {
+                    // Onda quadrada com duty de 25% — o timbre NES — e um
+                    // sopro de ruído no ataque, que é o que faz "blip" em vez
+                    // de "bip". Decaimento mais seco: 8-bit não reverbera.
+                    let phase = (frequency * t).truncatingRemainder(dividingBy: 1)
+                    let square = phase < 0.25 ? 1.0 : -1.0
+                    let noise = i < attack ? Double.random(in: -0.35...0.35) : 0
+                    wave = square * 0.8 + noise
+                } else {
+                    wave = sin(2 * .pi * frequency * t) + 0.18 * sin(4 * .pi * frequency * t)
+                }
                 let rise = i < attack ? Double(i) / Double(attack) : 1
-                channel[offset + i] = Float(wave * rise * exp(-5.5 * progress) * 0.32)
+                let decay = chiptune ? exp(-9.0 * progress) : exp(-5.5 * progress)
+                channel[offset + i] = Float(wave * rise * decay * 0.32)
             }
         }
         return buffer
