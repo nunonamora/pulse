@@ -56,6 +56,25 @@ enum VITheme {
     /// A mola das superfícies: saltitona q.b. — o overshoot pequeno é a
     /// assinatura do Arc, movimento com personalidade sem virar desenho
     /// animado.
+    /// A mesma cor, clareada até o texto dela ser legível sobre a versão
+    /// esbatida de si própria.
+    ///
+    /// Uma cápsula tingida é cor sobre cor, e é o arranjo mais fácil de falhar
+    /// sem dar por isso: as três primeiras que desenhei ficaram em 4,15, 4,17
+    /// e 4,24 para 1 — todas por baixo do mínimo de 4,5, todas com ar de quem
+    /// se lia bem. Misturar com branco sobe a luminância do texto sem lhe
+    /// tirar a identidade, que é o que se quer: a cápsula continua a dizer
+    /// "Claude" em laranja, só que agora dá mesmo para ler.
+    static func legible(_ tint: Color, blend: CGFloat = 0.35) -> Color {
+        let base = NSColor(tint).usingColorSpace(.sRGB) ?? .white
+        return Color(
+            .sRGB,
+            red: Double(base.redComponent + (1 - base.redComponent) * blend),
+            green: Double(base.greenComponent + (1 - base.greenComponent) * blend),
+            blue: Double(base.blueComponent + (1 - base.blueComponent) * blend)
+        )
+    }
+
     static let spring = Animation.spring(response: 0.38, dampingFraction: 0.72)
     /// A mola dos elementos pequenos (linhas, cartões): mais curta, mesmo
     /// feitio.

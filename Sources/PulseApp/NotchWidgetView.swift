@@ -165,14 +165,20 @@ struct NotchWidgetView: View {
         // alargar a ala por causa dele só empurrava o preto para cima dele.
         let walker: AgentTool? = store.sessions
             .first { $0.status == .working }?.tool
+        // As asas medem-se pelo que VÃO desenhar, não pelo que a contagem por
+        // estado desenhava antes: a esquerda leva uma criatura por sessão, e a
+        // direita leva o total ao lado do distintivo de quem espera por ti.
+        // Medir a coisa errada não dava erro nenhum — só cortava em silêncio o
+        // número do lado direito, que foi como isto se descobriu.
+        let creatureCount = min(store.sessions.count, 4)
         let naturalLeftWidth = layout.statusWingWidth(
             side: .left,
-            visibleIndicatorCount: leftEntries.count,
+            visibleIndicatorCount: creatureCount,
             showsIdleMark: showsIdleMark
         )
         let naturalRightWidth = layout.statusWingWidth(
             side: .right,
-            visibleIndicatorCount: rightEntries.count,
+            visibleIndicatorCount: rightEntries.count + (creatureCount > 0 ? 1 : 0),
             showsIdleMark: false
         )
         let wingWidths = layout.balancedStatusWingWidths(
@@ -546,6 +552,16 @@ struct NotchWidgetView: View {
         }
     }
 
+    /// As criaturas da barra fechada, uma por sessão e por ordem de abertura.
+    ///
+    /// Com teto de quatro: a asa esquerda tem largura finita e a partir daí os
+    /// bichos comprimiam-se uns nos outros até deixarem de se distinguir. A
+    /// contagem do outro lado continua a dizer o total verdadeiro, por isso
+    /// nada se perde — só deixa de se desenhar o que já não se via.
+    private var collapsedCreatures: [AgentTool] {
+        Array(store.sessions.prefix(4).map(\.tool))
+    }
+
     // MARK: Bar
 
     private func barRow(
@@ -577,9 +593,13 @@ struct NotchWidgetView: View {
                 } else {
                     HStack(spacing: 0) {
                         Spacer(minLength: layout.leftStatusWingLeadingPadding)
-                        HStack(spacing: NotchLayout.statusIndicatorSpacing) {
-                            ForEach(leftEntries) { entry in
-                                StatusSummaryIndicator(kind: entry.kind, count: entry.count)
+                        // Uma criatura por sessão, e não uma contagem por
+                        // estado. Um número obriga a ler; um grupo de bichos
+                        // conta-se de relance com a visão periférica, que é a
+                        // única atenção que uma barra de menus recebe.
+                        HStack(spacing: 3) {
+                            ForEach(collapsedCreatures, id: \.self) { tool in
+                                PixelAgentIcon(tool: tool)
                             }
                         }
                         Spacer(minLength: layout.leftStatusWingTrailingPadding)
@@ -591,12 +611,22 @@ struct NotchWidgetView: View {
             Color.clear
                 .frame(width: layout.notchWidth, height: layout.height)
             Group {
-                if !rightEntries.isEmpty {
+                if !rightEntries.isEmpty || !collapsedCreatures.isEmpty {
                     HStack(spacing: 0) {
                         Spacer(minLength: layout.rightStatusWingLeadingPadding)
                         HStack(spacing: NotchLayout.statusIndicatorSpacing) {
+                            // Quem precisa de ti continua a ter distintivo
+                            // próprio: é a única coisa aqui que pede uma ação,
+                            // e diluí-la na contagem geral era apagá-la.
                             ForEach(rightEntries) { entry in
                                 StatusSummaryIndicator(kind: entry.kind, count: entry.count)
+                            }
+                            if !collapsedCreatures.isEmpty {
+                                Text("\(store.sessions.count)")
+                                    .font(.system(size: 12, weight: .semibold,
+                                                  design: .rounded))
+                                    .monospacedDigit()
+                                    .foregroundStyle(.white.opacity(0.92))
                             }
                         }
                         Spacer(minLength: layout.rightStatusWingTrailingPadding)
@@ -1837,7 +1867,7 @@ private struct SessionRow: View {
             // pior do que nada.
             // Chips à Vibe Island: ferramenta e terminal em cápsulas cinza.
             // Dizem "quem e onde" sem gastar a linha de contexto.
-            InfoChip(text: session.tool.chipName)
+            InfoChip(text: session.tool.chipName, tint: MascotArt.color(session.tool))
             // O modelo e o esforço: dois agentes lado a lado num Opus e num
             // Haiku não são a mesma coisa, e o esforço explica sozinho porque
             // é que um demora cinco vezes mais.
@@ -2634,16 +2664,27 @@ enum UIRender {
 /// branco, raio pequeno.
 struct InfoChip: View {
     let text: String
+    /// A cor da identidade, quando a cápsula representa uma. A da ferramenta
+    /// leva a cor da criatura dela — o mesmo laranja no bicho e na cápsula
+    /// ensina, sem legenda, que os dois falam da mesma coisa. Os metadados
+    /// (modelo, terminal) ficam cinzentos: colorir tudo seria não colorir
+    /// nada.
+    var tint: Color?
+
+    init(text: String, tint: Color? = nil) {
+        self.text = text
+        self.tint = tint
+    }
 
     var body: some View {
         Text(text)
             .font(VITheme.mono(10.5))
-            .foregroundStyle(.white.opacity(0.82))
+            .foregroundStyle(tint.map { VITheme.legible($0) } ?? .white.opacity(0.82))
             .padding(.horizontal, 7)
             .padding(.vertical, 2.5)
             .background(
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(.white.opacity(0.12))
+                    .fill(tint?.opacity(0.16) ?? .white.opacity(0.12))
             )
             .lineLimit(1)
             .fixedSize()
