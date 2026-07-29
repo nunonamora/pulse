@@ -15,7 +15,7 @@ struct PulseSettingsView: View {
     @AppStorage("voiceUseSystem") private var voiceUseSystem = false
     @AppStorage("screenSelectionMode") private var screenSelectionMode = ScreenSelectionMode.pointer.rawValue
     @AppStorage("hotkeyEnabled") private var hotkeyEnabled = true
-    @AppStorage("soundStyle") private var soundStyle = "chime"
+    @AppStorage("soundStyle") private var soundStyle = "chiptune"
     @AppStorage("skipDecisionWhenTerminalVisible")
     private var skipDecisionWhenTerminalVisible = true
     @AppStorage("glassFrostRadiusNotch") private var notchFrostRadius = NotchGlassStyle.defaultFrostRadius

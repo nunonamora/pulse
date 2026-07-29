@@ -51,7 +51,10 @@ final class Earcons {
     /// onda quadrada com ataque de ruído — o vocabulário 8-bit do Vibe Island,
     /// sintetizado da mesma maneira que o resto: sem ficheiros de áudio.
     private var style: String {
-        UserDefaults.standard.string(forKey: "soundStyle") ?? "chime"
+        // 8-bit por omissão: é a voz da app clonada, e a família de sons tem
+        // de combinar com a tipografia pixel e as criaturas das linhas. Quem
+        // preferir os senos muda nas definições.
+        UserDefaults.standard.string(forKey: "soundStyle") ?? "chiptune"
     }
 
     func play(tool: AgentTool, state: EarconState) {
@@ -153,7 +156,17 @@ final class Earcons {
                     // Onda quadrada com duty de 25% — o timbre NES — e um
                     // sopro de ruído no ataque, que é o que faz "blip" em vez
                     // de "bip". Decaimento mais seco: 8-bit não reverbera.
-                    let phase = (frequency * t).truncatingRemainder(dividingBy: 1)
+                    //
+                    // Duas coisas que o aproximam do som de consola a sério:
+                    // a frequência é QUANTIZADA à grelha de períodos do chip
+                    // (um NES não toca uma frequência arbitrária, toca a mais
+                    // próxima que o seu divisor permite — é daí que vem a
+                    // afinação ligeiramente torta que o ouvido reconhece), e
+                    // a amplitude desce em degraus, porque o envelope de
+                    // volume tinha 4 bits e não uma curva contínua.
+                    let period = max(1.0, (1_789_773.0 / (16 * frequency)).rounded())
+                    let quantized = 1_789_773.0 / (16 * period)
+                    let phase = (quantized * t).truncatingRemainder(dividingBy: 1)
                     let square = phase < 0.25 ? 1.0 : -1.0
                     let noise = i < attack ? Double.random(in: -0.35...0.35) : 0
                     wave = square * 0.8 + noise
@@ -161,7 +174,11 @@ final class Earcons {
                     wave = sin(2 * .pi * frequency * t) + 0.18 * sin(4 * .pi * frequency * t)
                 }
                 let rise = i < attack ? Double(i) / Double(attack) : 1
-                let decay = chiptune ? exp(-9.0 * progress) : exp(-5.5 * progress)
+                var decay = chiptune ? exp(-9.0 * progress) : exp(-5.5 * progress)
+                if chiptune {
+                    // Envelope de 4 bits: 16 degraus, como o hardware.
+                    decay = (decay * 15).rounded(.down) / 15
+                }
                 channel[offset + i] = Float(wave * rise * decay * 0.32)
             }
         }
