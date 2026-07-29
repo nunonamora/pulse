@@ -24,6 +24,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var focusAcknowledgmentObserver: FocusAcknowledgmentObserver?
     private var screenshotSignal: DispatchSourceSignal?
     private var instanceLock: SingleInstanceLock?
+    /// Vive aqui e não numa variável local: a janela de boas-vindas fica
+    /// aberta muito depois do arranque acabar, e sem dono era recolhida com
+    /// ela à vista.
+    private var onboarding: OnboardingWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Os sinais primeiro, antes de qualquer coisa que possa demorar.
@@ -62,6 +66,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        // As boas-vindas só depois do trinco: numa corrida de arranques, a
+        // instância que perde termina aqui em cima — e era ela mostrar um
+        // segundo cartaz por cima do primeiro.
+        onboarding = OnboardingWindowController.presentIfNeeded()
         // Session names live next to — never inside — the state directory:
         // the store watches that directory and decode-attempts every .json.
         let store = StateStore(
