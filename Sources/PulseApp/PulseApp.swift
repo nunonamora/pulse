@@ -36,6 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installScreenshotSignal()
         installRenderSignal()
 
+        // A identidade tipográfica do clone, antes de qualquer vista nascer.
+        VITheme.registerFonts()
+
         NSApp.setActivationPolicy(.accessory)
         let stateDirectory = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".pulse/state", isDirectory: true)

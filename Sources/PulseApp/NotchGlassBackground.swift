@@ -39,9 +39,16 @@ struct NotchGlassBackdrop: View {
     @State private var reduceTransparency =
         NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
 
+    /// O clone é preto chapado, como o Vibe Island — o vidro fica atrás de
+    /// uma preferência para quem o quiser de volta. Não é regressão: é a
+    /// diretiva "exatamente igual", e o VI não tem vidro nenhum.
+    private var wantsGlass: Bool {
+        UserDefaults.standard.bool(forKey: "legacyGlass")
+    }
+
     var body: some View {
         Group {
-            if isStaticRender || reduceTransparency {
+            if isStaticRender || reduceTransparency || !wantsGlass {
                 // Num retrato para ficheiro o vidro não existe: é alimentado
                 // pelo servidor de janelas e sai em branco. Pior — sendo uma
                 // vista AppKit, faz o `ImageRenderer` devolver vista inválida e

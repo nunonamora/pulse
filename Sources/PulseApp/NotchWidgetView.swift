@@ -78,7 +78,7 @@ extension View {
 /// A spring das superfícies interiores do painel (linhas a abrir, scroll até
 /// à seleção). A da expansão do painel (0,32/0,86) fica própria: é a única
 /// animação que muda a silhueta inteira, e um nadinha mais lenta de propósito.
-private let innerSpring = Animation.spring(response: 0.28, dampingFraction: 0.9)
+private let innerSpring = VITheme.pop
 
 struct NotchWidgetView: View {
     @Bindable var store: StateStore
@@ -409,7 +409,7 @@ struct NotchWidgetView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: isExpanded)
+        .animation(.spring(response: 0.38, dampingFraction: 0.72), value: isExpanded)
         .onChange(of: pointerTracker.snapshot) { _, snapshot in
             handlePointerContainmentChange(snapshot)
         }
@@ -629,23 +629,23 @@ struct NotchWidgetView: View {
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(Color(red: 0.98, green: 0.63, blue: 0.25))
                         Text("5h")
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .font(VITheme.mono(12, weight: .semibold))
                             .foregroundStyle(.white.opacity(0.9))
                         Text(burnLabel(burn).replacingOccurrences(of: " · 5h", with: ""))
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .font(VITheme.mono(12, weight: .semibold))
                             .foregroundStyle(Color(red: 0.30, green: 0.82, blue: 0.42))
                         Text("\(burn.responses)r")
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(.white.opacity(0.45))
                         if let quota = codexQuota {
                             Text("|")
-                                .font(.system(size: 11, design: .monospaced))
+                                .font(VITheme.mono(11))
                                 .foregroundStyle(.white.opacity(0.25))
                             Text("Codex")
-                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .font(VITheme.mono(12, weight: .semibold))
                                 .foregroundStyle(.white.opacity(0.9))
                             Text(String(format: "%.0f%%", quota.usedPercent))
-                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .font(VITheme.mono(12, weight: .semibold))
                                 .foregroundStyle(
                                     quota.usedPercent >= 90
                                         ? Color(red: 0.97, green: 0.38, blue: 0.36)
@@ -1184,8 +1184,18 @@ private enum AgentIcons {
 private struct AgentIconView: View {
     let tool: AgentTool
 
+    /// O clone usa as criaturas pixel — as NOSSAS, dos bitmaps do mascote,
+    /// não as deles: a estética é a mesma linguagem (pixel-art por agente),
+    /// a arte é da casa. As marcas SVG ficam atrás da preferência do vidro,
+    /// juntas como "aspeto clássico".
+    private var pixelStyle: Bool {
+        !UserDefaults.standard.bool(forKey: "legacyGlass")
+    }
+
     var body: some View {
-        if let image = AgentIcons.byTool[tool] {
+        if pixelStyle {
+            PixelAgentIcon(tool: tool)
+        } else if let image = AgentIcons.byTool[tool] {
             Image(nsImage: image)
                 .resizable()
                 .interpolation(.high)
@@ -2459,7 +2469,7 @@ struct InfoChip: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 10.5, weight: .medium))
+            .font(VITheme.mono(10.5))
             .foregroundStyle(.white.opacity(0.82))
             .padding(.horizontal, 7)
             .padding(.vertical, 2.5)
@@ -2500,5 +2510,31 @@ extension TerminalContext {
         case .some(let other): return other.isEmpty ? nil : other
         case nil:              return nil
         }
+    }
+}
+
+/// A criatura pixel de uma ferramenta, parada, à escala de ícone de linha.
+/// Reutiliza os bitmaps do mascote — o desenho que já é a marca da casa.
+private struct PixelAgentIcon: View {
+    let tool: AgentTool
+
+    var body: some View {
+        let bitmap = MascotArt.frames(for: tool)[0]
+        let cell: CGFloat = 16 / CGFloat(max(bitmap.count, bitmap[0].count))
+        Canvas { context, _ in
+            for (row, line) in bitmap.enumerated() {
+                for (column, character) in line.enumerated() where character != "." {
+                    context.fill(
+                        Path(CGRect(x: CGFloat(column) * cell, y: CGFloat(row) * cell,
+                                    width: cell, height: cell)),
+                        with: .color(character == "#"
+                            ? MascotArt.color(tool)
+                            : MascotArt.shade(tool))
+                    )
+                }
+            }
+        }
+        .frame(width: 16, height: 16)
+        .accessibilityHidden(true)
     }
 }

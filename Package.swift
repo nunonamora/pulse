@@ -27,7 +27,7 @@ let package = Package(
             // as a prebuilt default.metallib; regenerate it from Ripple.metal
             // with scripts/compile-shaders.sh after editing the source.
             exclude: ["Ripple.metal"],
-            resources: [.copy("Resources/default.metallib")]
+            resources: [.copy("Resources/default.metallib"), .copy("Resources/Fonts")]
         ),
         .executableTarget(
             name: "PulseTests",

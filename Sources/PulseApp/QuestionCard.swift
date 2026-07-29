@@ -20,7 +20,7 @@ struct QuestionCard: View {
 
     /// O teal do Vibe Island, o único sítio da app onde ele fala: este cartão
     /// É o vocabulário deles, e a cor é a assinatura.
-    private static let accent = Color(red: 0.20, green: 0.85, blue: 0.78)
+    private static let accent = VITheme.teal
 
     @State private var failed = false
     @FocusState private var keyboardFocused: Bool
@@ -35,7 +35,7 @@ struct QuestionCard: View {
                 Image(systemName: "flag.fill")
                     .font(.system(size: 9, weight: .semibold))
                 Text("\(question.tool.spokenName) asks")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .font(VITheme.mono(11, weight: .semibold))
             }
             .foregroundStyle(Self.accent)
 
@@ -85,7 +85,7 @@ struct QuestionCard: View {
             HStack(spacing: 8) {
                 KeycapChip(label: "⌘\(index + 1)")
                 Text(label)
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(VITheme.mono(12))
                     .foregroundStyle(.white.opacity(0.92))
                     .lineLimit(1)
                 Spacer(minLength: 0)
