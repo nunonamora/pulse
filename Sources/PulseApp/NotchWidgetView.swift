@@ -1587,8 +1587,8 @@ private struct SessionRow: View {
             }
             // O plano e a equipa desta sessão, recuados para se lerem como
             // conteúdo dela e não como mais linhas da lista.
-            if let taskList, !taskList.items.isEmpty {
-                TaskListCard(list: taskList)
+            if let list = effectiveTaskList, !list.items.isEmpty {
+                TaskListCard(list: list)
                     .padding(.horizontal, 10)
                     .padding(.bottom, 6)
             }
@@ -1695,6 +1695,13 @@ private struct SessionRow: View {
             return SubagentRoster.roster(transcriptPath: path)
         }
         return roster
+    }
+
+    private var effectiveTaskList: TaskListMeter.List? {
+        if isStaticRender, let path = session.transcriptPath {
+            return TaskListMeter.list(transcriptPath: path)
+        }
+        return taskList
     }
 
     private var effectiveMeta: SessionMeta.Reading? {
@@ -2542,12 +2549,44 @@ enum UIRender {
     /// contexto: um vermelho (92%), um âmbar (76%), um branco (30%).
     private static func sampleSessions() -> [AgentSession] {
         let now = Date()
-        func transcript(_ name: String, tokens: Int) -> String {
+        func transcript(_ name: String, tokens: Int, rich: Bool = false) -> String {
             let path = "/tmp/pulse-ui-fixtures-\(name).jsonl"
-            let lines = [
+            var lines = [
                 #"{"type":"user","message":{"content":"fix the auth bug in middleware and add tests"}}"#,
-                #"{"message":{"model":"claude-opus-5","usage":{"input_tokens":2,"cache_read_input_tokens":\#(tokens),"cache_creation_input_tokens":0,"output_tokens":10}}}"#,
+                #"{"effort":"xhigh","message":{"model":"claude-opus-5","usage":{"input_tokens":2,"cache_read_input_tokens":\#(tokens),"cache_creation_input_tokens":0,"output_tokens":10}}}"#,
             ]
+            if rich {
+                // Uma sessão com plano e equipa: é a única forma de o arnês
+                // desenhar os cartões aninhados, e um cartão que nunca se
+                // retrata é um cartão que ninguém audita.
+                lines.append(#"{"message":{"content":[{"type":"tool_use","name":"TodoWrite","input":{"todos":[{"content":"Audit the auth flow","status":"in_progress"},{"content":"Add regression tests","status":"pending"},{"content":"Map session state","status":"completed"}]}}]}}"#)
+                lines.append(#"{"message":{"content":[{"type":"tool_use","id":"t1","name":"Agent","input":{"name":"Explore","subagent_type":"general-purpose","description":"Search API endpoints","prompt":"p"}}]}}"#)
+                lines.append(#"{"message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"Async agent launched.\nagentId: fixture1\n"}]}}"#)
+                lines.append(#"{"message":{"content":[{"type":"tool_use","id":"t2","name":"Agent","input":{"name":"audit-visual","subagent_type":"general-purpose","description":"Compare portraits","prompt":"q"}}]}}"#)
+                lines.append(#"{"message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":"Spawned.\nagent_id: audit-visual@session-61c74167\n"}]}}"#)
+
+                // Os transcripts dos filhos vivem numa pasta irmã com o nome
+                // da sessão — a mesma convenção que a app lê a sério.
+                let children = URL(fileURLWithPath: path)
+                    .deletingPathExtension()
+                    .appendingPathComponent("subagents", isDirectory: true)
+                try? FileManager.default.createDirectory(
+                    at: children, withIntermediateDirectories: true)
+                let stamp = ISO8601DateFormatter().string(
+                    from: now.addingTimeInterval(-468))
+                for (id, activity) in [
+                    ("fixture1", #"{"type":"tool_use","name":"Grep","input":{"pattern":"handleRequest"}}"#),
+                    ("audit-visual", #"{"type":"tool_use","name":"Read","input":{"file_path":"/a/VITheme.swift"}}"#),
+                ] {
+                    let child = [
+                        #"{"agentId":"\#(id)","timestamp":"\#(stamp)","message":{"content":"p"}}"#,
+                        #"{"message":{"model":"claude-sonnet-5","content":[\#(activity)]}}"#,
+                    ].joined(separator: "\n")
+                    try? (child + "\n").write(
+                        to: children.appendingPathComponent("agent-\(id).jsonl"),
+                        atomically: true, encoding: .utf8)
+                }
+            }
             try? (lines.joined(separator: "\n") + "\n")
                 .write(toFile: path, atomically: true, encoding: .utf8)
             return path
@@ -2560,7 +2599,9 @@ enum UIRender {
                 tool: tool, sessionID: name, pid: 1, status: status,
                 attentionReason: reason, cwd: "/Users/você/coding/\(name)",
                 startedAt: now.addingTimeInterval(-minutes * 60), updatedAt: now,
-                transcriptPath: tokens.map { transcript(name, tokens: $0) }
+                transcriptPath: tokens.map {
+                    transcript(name, tokens: $0, rich: name == "pulse")
+                }
             )
         }
         return [
