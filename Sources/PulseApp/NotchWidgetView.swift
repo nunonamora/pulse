@@ -320,6 +320,12 @@ struct NotchWidgetView: View {
                             ? pillTintOpacity : notchTintOpacity
                     )
                     .modifier(ExpansionRippleEffect(trigger: rippleTrigger))
+                    // Os feixes nascem do centro do recorte e morrem com a
+                    // spring — pontuação do abrir, não decoração permanente.
+                    .modifier(GodRayEffect(
+                        trigger: rippleTrigger,
+                        originX: barLeadingOffset + leftWidth + layout.notchWidth / 2
+                    ))
                 )
                 .background(
                     NotchGlassBackdrop(
@@ -1110,7 +1116,9 @@ private func indicatorColor(for style: StatusIndicatorStyle) -> Color {
 private enum AgentIcons {
     static let byTool: [AgentTool: NSImage] = Dictionary(
         uniqueKeysWithValues: AgentTool.allCases.compactMap { tool in
-            NSImage(contentsOf: BundledResources.iconURL(for: tool)).map { (tool, $0) }
+            BundledResources.iconURL(for: tool)
+                .flatMap { NSImage(contentsOf: $0) }
+                .map { (tool, $0) }
         }
     )
 }
@@ -2203,6 +2211,17 @@ enum UIRender {
                 width: geometry.width, name: name
             )
         }
+
+        // Os feixes de luz, congelados a meio do voo (progress 0,55): é o
+        // único instante em que um efeito transitório se deixa retratar.
+        render(
+            ZStack(alignment: .top) {
+                Color.black
+                GodRays(progress: 0.55, origin: CGPoint(x: 400, y: 0))
+            }
+            .frame(height: 240),
+            width: 800, name: "rays"
+        )
 
         // As Definições ficam de fora com conhecimento de causa: o Form
         // nativo é AppKit por dentro e sai um retângulo branco daqui — e

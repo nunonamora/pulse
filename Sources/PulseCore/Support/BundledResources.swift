@@ -29,8 +29,14 @@ public enum BundledResources {
 
     /// Official brand marks (Anthropic's Claude spark, sst/opencode's glyph,
     /// OpenAI's knot for Codex) — see NOTICE for trademark attribution.
-    public static func iconURL(for tool: AgentTool) -> URL {
-        resourceURL(named: tool.rawValue, extension: "svg", subdirectory: "Resources/icons")
+    public static func iconURL(for tool: AgentTool) -> URL? {
+        // O caso genérico não tem marca — é qualquer ferramenta que se
+        // reporte pelo adaptador universal. Pedir aqui o SVG dele batia na
+        // asserção de recurso em falta e MATAVA a app na primeira linha que o
+        // desenhasse; foi exatamente o crash que este guard encerra. `nil`
+        // deixa a vista cair no distintivo de letra, que já existia.
+        guard tool != .other else { return nil }
+        return resourceURL(named: tool.rawValue, extension: "svg", subdirectory: "Resources/icons")
     }
 
     private static func resourceURL(
