@@ -52,9 +52,11 @@ struct PermissionDecisionCard: View {
 
     private var risk: CommandRisk { CommandRisk.of(request) }
 
-    /// Teto do poço do corpo. Fixo: desde que o "always allow" passou a link
-    /// na linha das ações, deixou de haver segunda linha a quem ceder altura.
-    private var payloadHeight: CGFloat { 144 }
+    /// Teto do poço do corpo. Fixo por omissão; ctrl+O levanta-o para ler um
+    /// comando comprido por inteiro sem tocar no rato.
+    private var payloadHeight: CGFloat { isPayloadExpanded ? 280 : 144 }
+
+    @State private var isPayloadExpanded = false
 
     /// Altura real do corpo, medida.
     ///
@@ -124,6 +126,21 @@ struct PermissionDecisionCard: View {
         .onAppear { keyboardFocused = true }
         .onKeyPress(.return) { decide(.allow); return .handled }
         .onKeyPress(.escape) { decide(.deny); return .handled }
+        // ⌘Y / ⌘N: o par clássico sim/não, vindo do idioma do Vibe Island.
+        // Coexistem com ⏎/esc — atalhos a mais não custam, atalhos a menos
+        // obrigam a aprender os nossos.
+        .onKeyPress(characters: CharacterSet(charactersIn: "yn"), phases: .down) { press in
+            guard press.modifiers.contains(.command) else { return .ignored }
+            decide(press.characters == "y" ? .allow : .deny)
+            return .handled
+        }
+        // ctrl+O alterna o poço expandido: um comando comprido lê-se por
+        // inteiro sem rato.
+        .onKeyPress(characters: CharacterSet(charactersIn: "o"), phases: .down) { press in
+            guard press.modifiers.contains(.control) else { return .ignored }
+            withAnimation(.easeOut(duration: 0.18)) { isPayloadExpanded.toggle() }
+            return .handled
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(request.summary), in \(request.projectName)")
     }
@@ -341,8 +358,22 @@ struct PermissionDecisionCard: View {
         .textSelection(.enabled)
     }
 
+    /// O plano em Markdown verdadeiro.
+    ///
+    /// `LocalizedStringKey` só percebia o inline básico; um plano do
+    /// ExitPlanMode traz cabeçalhos e listas, e chegavam com os cardinais à
+    /// mostra. O parser completo interpreta a sintaxe toda; o que ele não
+    /// souber, mostra-se como texto — nunca menos do que antes.
     private func planBody(_ text: String) -> some View {
-        Text(LocalizedStringKey(text))
+        let markdown = (try? AttributedString(
+            markdown: text,
+            options: .init(
+                allowsExtendedAttributes: true,
+                interpretedSyntax: .full,
+                failurePolicy: .returnPartiallyParsedIfPossible
+            )
+        )) ?? AttributedString(text)
+        return Text(markdown)
             .font(.system(size: 11.5))
             .foregroundStyle(.white.opacity(0.94))
             .textSelection(.enabled)
