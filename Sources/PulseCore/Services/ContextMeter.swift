@@ -21,6 +21,10 @@ public enum ContextMeter {
         public let tokens: Int
         /// O tamanho da janela do modelo que produziu a última mensagem.
         public let window: Int
+        /// O último prompt escrito pelo utilizador — a linha "You: …" da
+        /// anatomia do Vibe Island. Curto e de uma linha; é legenda, não
+        /// documento.
+        public var lastPrompt: String?
 
         public var fraction: Double {
             window > 0 ? min(1, Double(tokens) / Double(window)) : 0
@@ -46,6 +50,31 @@ public enum ContextMeter {
         // Da última linha para a primeira: a mensagem mais recente com uso é a
         // resposta, e o resto do ficheiro deixa de interessar.
         let text = String(decoding: data, as: UTF8.self)
+        // O último prompt humano na cauda: uma linha type=user cujo conteúdo
+        // seja texto. Tool results também chegam como "user" — filtram-se por
+        // terem tool_result no corpo.
+        var lastPrompt: String?
+        for line in text.split(separator: "\n").reversed() {
+            guard line.contains("\"type\":\"user\""),
+                  !line.contains("\"tool_result\""),
+                  let object = try? JSONSerialization.jsonObject(
+                      with: Data(line.utf8)) as? [String: Any],
+                  let message = object["message"] as? [String: Any]
+            else { continue }
+            var content: String?
+            if let direct = message["content"] as? String {
+                content = direct
+            } else if let blocks = message["content"] as? [[String: Any]] {
+                content = blocks.compactMap { $0["text"] as? String }.first
+            }
+            if var prompt = content?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !prompt.isEmpty, !prompt.hasPrefix("<") {
+                prompt = prompt.replacingOccurrences(of: "\n", with: " ")
+                if prompt.count > 90 { prompt = String(prompt.prefix(90)) + "…" }
+                lastPrompt = prompt
+                break
+            }
+        }
         for line in text.split(separator: "\n").reversed() {
             guard line.contains("\"usage\""),
                   let object = try? JSONSerialization.jsonObject(
@@ -60,10 +89,12 @@ public enum ContextMeter {
             let tokens = input + cacheRead + cacheCreated
             guard tokens > 0 else { continue }
 
-            return Reading(
+            var reading = Reading(
                 tokens: tokens,
                 window: window(model: message["model"] as? String, tokens: tokens)
             )
+            reading.lastPrompt = lastPrompt
+            return reading
         }
         return nil
     }

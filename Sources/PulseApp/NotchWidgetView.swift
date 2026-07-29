@@ -614,9 +614,51 @@ struct NotchWidgetView: View {
                 // O cabeçalho diz sempre o que está por baixo dele. Deixá-lo em
                 // "Active sessions" com o histórico aberto era assinar a lista
                 // errada, e o número ao lado ficava a contar outra coisa.
-                Text(showsHistory ? "Recent decisions" : "Active sessions")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.55))
+                // O cabeçalho à Vibe Island: a linha de quota no lugar do
+                // título — "✦ 5h 1.2M · 96r | Codex 5%". A faísca laranja e a
+                // estrutura são deles; os números são os nossos, honestos: o
+                // consumo real da janela, e a única percentagem é a que o
+                // fornecedor calculou.
+                if showsHistory {
+                    Text("Recent decisions")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.55))
+                } else if let burn = planBurn, burn.tokens > 0 {
+                    HStack(spacing: 5) {
+                        Image(systemName: "sparkle")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.98, green: 0.63, blue: 0.25))
+                        Text("5h")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.9))
+                        Text(burnLabel(burn).replacingOccurrences(of: " · 5h", with: ""))
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Color(red: 0.30, green: 0.82, blue: 0.42))
+                        Text("\(burn.responses)r")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.45))
+                        if let quota = codexQuota {
+                            Text("|")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.25))
+                            Text("Codex")
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.9))
+                            Text(String(format: "%.0f%%", quota.usedPercent))
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(
+                                    quota.usedPercent >= 90
+                                        ? Color(red: 0.97, green: 0.38, blue: 0.36)
+                                        : Color(red: 0.30, green: 0.82, blue: 0.42)
+                                )
+                        }
+                    }
+                    .help(burnHelp(burn))
+                } else {
+                    Text("Active sessions")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
                 Spacer(minLength: 0)
             }
             .padding(
@@ -632,27 +674,6 @@ struct NotchWidgetView: View {
                 // percentagens de um denominador inventado — os tetos dos
                 // planos não são públicos, e um número certo calibra melhor o
                 // instinto do que uma barra errada.
-                // A quota do Codex ao lado do queimador do Claude: a única
-                // percentagem que se mostra é a que o fornecedor calculou.
-                if let quota = codexQuota {
-                    Text(String(format: "Codex %.0f%%", quota.usedPercent))
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(
-                            quota.usedPercent >= 90
-                                ? Color(red: 0.97, green: 0.38, blue: 0.36)
-                                : .white.opacity(0.32)
-                        )
-                        .help(codexQuotaHelp(quota))
-                }
-                if let burn = planBurn, burn.tokens > 0 {
-                    Text(burnLabel(burn))
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.32))
-                        .help(burnHelp(burn))
-                        .accessibilityLabel("Plan burn: \(burn.responses) responses in five hours")
-                }
                 Text(showsHistory ? decisionHistory.count : sessionCount, format: .number)
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .monospacedDigit()
@@ -1605,6 +1626,15 @@ private struct SessionRow: View {
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.94))
                     .lineLimit(1)
+                // O último prompt, à Vibe Island: "You: …". Diz de imediato o
+                // que ESTA sessão anda a fazer por ti — o título sozinho só
+                // diz onde.
+                if let prompt = effectiveReading?.lastPrompt {
+                    Text("You: \(prompt)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.45))
+                        .lineLimit(1)
+                }
                 // The title belongs to the tab now, so the directory keeps
                 // the project context here, followed by the pipeline step —
                 // which outranks the branch: convoy targets worktrees whose
@@ -1626,8 +1656,12 @@ private struct SessionRow: View {
                         if showsFolder { Text("·") }
                         Image(systemName: "point.3.filled.connected.trianglepath.dotted")
                             .font(.system(size: 9, weight: .semibold))
+                        // Azul, como no Vibe Island: a atividade viva é a única
+                        // linha da fila que muda sozinha, e a cor separa-a dos
+                        // metadados imóveis à volta.
                         Text(currentStep)
                             .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Color(red: 0.35, green: 0.55, blue: 0.98))
                     } else if let branch = branchName {
                         if showsFolder { Text("·") }
                         Image(systemName: "arrow.triangle.branch")
@@ -1668,6 +1702,12 @@ private struct SessionRow: View {
             // vai compactar em breve, e sabê-lo ANTES muda o que se lhe pede.
             // Só aparece quando há transcript e leitura — zero inventado seria
             // pior do que nada.
+            // Chips à Vibe Island: ferramenta e terminal em cápsulas cinza.
+            // Dizem "quem e onde" sem gastar a linha de contexto.
+            InfoChip(text: session.tool.chipName)
+            if let terminalName = session.terminal.chipName {
+                InfoChip(text: terminalName)
+            }
             if let reading = effectiveReading {
                 ContextGauge(reading: reading)
                     .help(String(
@@ -2381,8 +2421,12 @@ enum UIRender {
         let now = Date()
         func transcript(_ name: String, tokens: Int) -> String {
             let path = "/tmp/pulse-ui-fixtures-\(name).jsonl"
-            let line = #"{"message":{"model":"claude-opus-5","usage":{"input_tokens":2,"cache_read_input_tokens":\#(tokens),"cache_creation_input_tokens":0,"output_tokens":10}}}"#
-            try? (line + "\n").write(toFile: path, atomically: true, encoding: .utf8)
+            let lines = [
+                #"{"type":"user","message":{"content":"fix the auth bug in middleware and add tests"}}"#,
+                #"{"message":{"model":"claude-opus-5","usage":{"input_tokens":2,"cache_read_input_tokens":\#(tokens),"cache_creation_input_tokens":0,"output_tokens":10}}}"#,
+            ]
+            try? (lines.joined(separator: "\n") + "\n")
+                .write(toFile: path, atomically: true, encoding: .utf8)
             return path
         }
         func make(
@@ -2402,5 +2446,59 @@ enum UIRender {
             make(.codex, "siva", .idle, minutes: 128),
             make(.opencode, "um-projeto-com-nome-comprido", .idle, minutes: 7, tokens: 61_000),
         ]
+    }
+}
+
+// MARK: - Chips à Vibe Island
+
+/// Cápsula cinza com um nome curto — a etiqueta de ferramenta/terminal das
+/// linhas do Vibe Island, adotada tal e qual: fundo #2a2a2e, texto quase
+/// branco, raio pequeno.
+struct InfoChip: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 10.5, weight: .medium))
+            .foregroundStyle(.white.opacity(0.82))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2.5)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(.white.opacity(0.12))
+            )
+            .lineLimit(1)
+            .fixedSize()
+    }
+}
+
+extension AgentTool {
+    /// O nome de chip, curto como no Vibe Island.
+    var chipName: String {
+        switch self {
+        case .claude:   return "Claude"
+        case .codex:    return "Codex"
+        case .opencode: return "OpenCode"
+        case .pi:       return "Pi"
+        case .convoy:   return "Convoy"
+        case .other:    return "Agent"
+        }
+    }
+}
+
+extension TerminalContext {
+    /// O terminal desta sessão, se se souber — para o chip "onde".
+    var chipName: String? {
+        if cmuxSurfaceID != nil { return "cmux" }
+        if wezTermPane != nil { return "WezTerm" }
+        if kittyWindowID != nil { return "kitty" }
+        switch termProgram?.lowercased() {
+        case "ghostty":        return "Ghostty"
+        case "iterm.app":      return "iTerm"
+        case "apple_terminal": return "Terminal"
+        case "wezterm":        return "WezTerm"
+        case .some(let other): return other.isEmpty ? nil : other
+        case nil:              return nil
+        }
     }
 }
