@@ -111,6 +111,9 @@ public struct ClaudeHookProcessor: Sendable {
             // O cmux publica os dois com nomes duplicados; qualquer um serve.
             cmuxSurfaceID: environment["CMUX_SURFACE_ID"] ?? environment["CMUX_PANEL_ID"],
             cmuxTabID: environment["CMUX_TAB_ID"] ?? environment["CMUX_WORKSPACE_ID"],
+            wezTermPane: environment["WEZTERM_PANE"],
+            kittyWindowID: environment["KITTY_WINDOW_ID"],
+            kittyListenOn: environment["KITTY_LISTEN_ON"],
             tmuxPane: environment["TMUX_PANE"],
             tty: environment["PULSE_TTY"],
             windowTitleHint: "\(URL(fileURLWithPath: cwd).lastPathComponent) — claude"

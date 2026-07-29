@@ -62,6 +62,12 @@ public struct TerminalContext: Codable, Equatable, Sendable {
     /// O separador que contém esse painel (`CMUX_TAB_ID`). Serve de recuo
     /// quando o split foi fechado mas o separador ainda existe.
     public let cmuxTabID: String?
+    /// O painel exato no WezTerm (`WEZTERM_PANE`).
+    public let wezTermPane: String?
+    /// A janela exata no Kitty (`KITTY_WINDOW_ID`) e o socket de controlo
+    /// remoto (`KITTY_LISTEN_ON`) — sem o socket não há salto preciso.
+    public let kittyWindowID: String?
+    public let kittyListenOn: String?
     public let tmuxPane: String?
     public let tty: String?
     public let windowTitleHint: String?
@@ -72,6 +78,9 @@ public struct TerminalContext: Codable, Equatable, Sendable {
         itermSessionID: String? = nil,
         cmuxSurfaceID: String? = nil,
         cmuxTabID: String? = nil,
+        wezTermPane: String? = nil,
+        kittyWindowID: String? = nil,
+        kittyListenOn: String? = nil,
         tmuxPane: String? = nil,
         tty: String? = nil,
         windowTitleHint: String? = nil
@@ -81,6 +90,9 @@ public struct TerminalContext: Codable, Equatable, Sendable {
         self.itermSessionID = itermSessionID
         self.cmuxSurfaceID = cmuxSurfaceID
         self.cmuxTabID = cmuxTabID
+        self.wezTermPane = wezTermPane
+        self.kittyWindowID = kittyWindowID
+        self.kittyListenOn = kittyListenOn
         self.tmuxPane = tmuxPane
         self.tty = tty
         self.windowTitleHint = windowTitleHint
@@ -100,6 +112,9 @@ public struct TerminalContext: Codable, Equatable, Sendable {
             itermSessionID: itermSessionID ?? earlier.itermSessionID,
             cmuxSurfaceID: cmuxSurfaceID ?? earlier.cmuxSurfaceID,
             cmuxTabID: cmuxTabID ?? earlier.cmuxTabID,
+            wezTermPane: wezTermPane ?? earlier.wezTermPane,
+            kittyWindowID: kittyWindowID ?? earlier.kittyWindowID,
+            kittyListenOn: kittyListenOn ?? earlier.kittyListenOn,
             tmuxPane: tmuxPane ?? earlier.tmuxPane,
             tty: tty ?? earlier.tty,
             windowTitleHint: windowTitleHint ?? earlier.windowTitleHint
@@ -112,6 +127,9 @@ public struct TerminalContext: Codable, Equatable, Sendable {
         case itermSessionID = "iterm_session_id"
         case cmuxSurfaceID = "cmux_surface_id"
         case cmuxTabID = "cmux_tab_id"
+        case wezTermPane = "wezterm_pane"
+        case kittyWindowID = "kitty_window_id"
+        case kittyListenOn = "kitty_listen_on"
         case tmuxPane = "tmux_pane"
         case tty
         case windowTitleHint = "window_title_hint"

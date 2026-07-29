@@ -128,6 +128,34 @@ public enum FocusPlanner {
         if session.terminal.termProgram?.lowercased() == "ghostty" {
             return .appleScript(ghosttyScript(for: session))
         }
+        // WezTerm: o CLI dele foca o painel exato; o `open -b` a seguir traz a
+        // app à frente — o activate-pane muda o foco DENTRO do WezTerm mas não
+        // ativa a aplicação. Uma ação só, para a escada de recurso tratar o
+        // conjunto como um degrau.
+        if session.terminal.termProgram?.lowercased() == "wezterm",
+           let pane = session.terminal.wezTermPane, !pane.isEmpty,
+           pane.range(of: #"^[0-9]+$"#, options: .regularExpression) != nil {
+            return .run(executable: "/bin/sh", arguments: [
+                "-c",
+                "wezterm cli activate-pane --pane-id \(pane) && open -b com.github.wez.wezterm",
+            ])
+        }
+        // Kitty: precisa do socket de controlo remoto que ele próprio anuncia
+        // em KITTY_LISTEN_ON. Sem socket não há salto preciso — cai no recurso
+        // genérico em vez de tentar um comando que vai falhar.
+        if session.terminal.termProgram?.lowercased() == "kitty" ||
+            session.terminal.kittyWindowID != nil {
+            if let window = session.terminal.kittyWindowID,
+               let socket = session.terminal.kittyListenOn, !socket.isEmpty,
+               window.range(of: #"^[0-9]+$"#, options: .regularExpression) != nil,
+               socket.range(of: #"^[A-Za-z0-9_@:./-]+$"#, options: .regularExpression) != nil {
+                return .run(executable: "/bin/sh", arguments: [
+                    "-c",
+                    "kitty @ --to '\(socket)' focus-window --match id:\(window) && open -b net.kovidgoyal.kitty",
+                ])
+            }
+            throw FocusError.missingTerminalTarget
+        }
         if let identifier = session.terminal.itermSessionID {
             let normalizedIdentifier = normalizedITermIdentifier(identifier)
             if !normalizedIdentifier.isEmpty {

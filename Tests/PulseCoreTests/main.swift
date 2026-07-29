@@ -7644,6 +7644,7 @@ let tests: [(String, () throws -> Void)] = [
     ("sound pack resolver prefers tool-specific files", testSoundPackResolverPrefersToolSpecificFiles),
     ("CLI parses the universal report command", testCLIParsesUniversalReport),
     ("codex quota reads the newest rate limits", testCodexQuotaReadsTheNewestRateLimits),
+    ("focus planner targets WezTerm and Kitty precisely", testFocusPlannerTargetsWezTermAndKittyPrecisely),
 ]
 
 if CommandLine.arguments.count == 3,
@@ -7810,4 +7811,48 @@ func testCodexQuotaReadsTheNewestRateLimits() throws {
     try expect(snapshot.planType, equals: "free", "plan type carried through")
     try expect(CodexQuota.latest(sessionsDirectory: root.appendingPathComponent("empty")) == nil,
                equals: true, "no rollouts means no snapshot, not zero")
+}
+
+func testFocusPlannerTargetsWezTermAndKittyPrecisely() throws {
+    func session(_ terminal: TerminalContext) -> AgentSession {
+        AgentSession(tool: .claude, sessionID: "s", pid: 1, status: .working,
+                     cwd: "/tmp", startedAt: Date(), updatedAt: Date(), terminal: terminal)
+    }
+
+    let wez = try FocusPlanner.actions(for: session(TerminalContext(
+        termProgram: "WezTerm", wezTermPane: "7", kittyWindowID: nil,
+        kittyListenOn: nil, tty: "/dev/ttys009")))
+    try expect(
+        wez,
+        equals: [FocusAction.run(executable: "/bin/sh", arguments: [
+            "-c", "wezterm cli activate-pane --pane-id 7 && open -b com.github.wez.wezterm",
+        ])],
+        "wezterm plans the exact pane plus app activation"
+    )
+
+    let kitty = try FocusPlanner.actions(for: session(TerminalContext(
+        termProgram: "kitty",
+        kittyWindowID: "3", kittyListenOn: "unix:/tmp/kitty-1",
+        tty: "/dev/ttys009")))
+    try expect(
+        kitty,
+        equals: [FocusAction.run(executable: "/bin/sh", arguments: [
+            "-c", "kitty @ --to 'unix:/tmp/kitty-1' focus-window --match id:3 && open -b net.kovidgoyal.kitty",
+        ])],
+        "kitty plans via its remote-control socket"
+    )
+
+    // Um pane com lixo shell não pode chegar a um sh -c. Rejeitar o plano por
+    // inteiro também é seguro — o que não pode acontecer é o lixo passar.
+    let hostile = session(TerminalContext(termProgram: "WezTerm", wezTermPane: "7; rm -rf /"))
+    var planned: [FocusAction] = []
+    do { planned = try FocusPlanner.actions(for: hostile) } catch {}
+    try expect(
+        planned.contains { action in
+            if case let .run(_, arguments) = action { return arguments.joined().contains("rm -rf") }
+            return false
+        },
+        equals: false,
+        "shell metacharacters in the pane id never reach sh -c"
+    )
 }
