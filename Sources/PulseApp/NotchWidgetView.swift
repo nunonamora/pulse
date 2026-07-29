@@ -116,6 +116,8 @@ struct NotchWidgetView: View {
     /// I/O por vaidade.
     @State private var planBurn: PlanUsage.Burn?
     @State private var planBurnAt: Date = .distantPast
+    /// A quota do Codex, dita pela OpenAI nos rollouts locais.
+    @State private var codexQuota: CodexQuota.Snapshot?
     /// As decisões lidas do disco, tal como estavam quando abriste o histórico.
     ///
     /// Lidas de uma vez e guardadas aqui, e não perguntadas ao store dentro do
@@ -424,7 +426,11 @@ struct NotchWidgetView: View {
                 planBurnAt = Date()
                 Task.detached(priority: .utility) {
                     let burn = PlanUsage.currentWindow()
-                    await MainActor.run { planBurn = burn }
+                    let quota = CodexQuota.latest()
+                    await MainActor.run {
+                        planBurn = burn
+                        codexQuota = quota
+                    }
                 }
             }
             publishInteractiveRegion(
@@ -598,6 +604,19 @@ struct NotchWidgetView: View {
                 // percentagens de um denominador inventado — os tetos dos
                 // planos não são públicos, e um número certo calibra melhor o
                 // instinto do que uma barra errada.
+                // A quota do Codex ao lado do queimador do Claude: a única
+                // percentagem que se mostra é a que o fornecedor calculou.
+                if let quota = codexQuota {
+                    Text(String(format: "Codex %.0f%%", quota.usedPercent))
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(
+                            quota.usedPercent >= 90
+                                ? Color(red: 0.97, green: 0.38, blue: 0.36)
+                                : .white.opacity(0.32)
+                        )
+                        .help(codexQuotaHelp(quota))
+                }
                 if let burn = planBurn, burn.tokens > 0 {
                     Text(burnLabel(burn))
                         .font(.system(size: 10, weight: .medium, design: .rounded))
@@ -716,6 +735,16 @@ struct NotchWidgetView: View {
             ? String(format: "%.1fM", millions)
             : String(format: "%dk", burn.tokens / 1000)
         return "\(amount) · 5h"
+    }
+
+    private func codexQuotaHelp(_ quota: CodexQuota.Snapshot) -> String {
+        let window = quota.windowMinutes >= 1440
+            ? "\(quota.windowMinutes / 1440)-day window"
+            : "\(quota.windowMinutes / 60)-hour window"
+        let plan = quota.planType.map { " on the \($0) plan" } ?? ""
+        let age = Int(Date().timeIntervalSince(quota.observedAt) / 60)
+        let freshness = age < 2 ? "just now" : (age < 120 ? "\(age) min ago" : "\(age / 60) h ago")
+        return "Codex: \(Int(quota.usedPercent))% of the \(window)\(plan), as reported by the provider \(freshness)."
     }
 
     private func toggleHistory() {

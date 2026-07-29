@@ -7643,6 +7643,7 @@ let tests: [(String, () throws -> Void)] = [
     ("subagent meter counts only unfinished tasks", testSubagentMeterCountsOnlyUnfinishedTasks),
     ("sound pack resolver prefers tool-specific files", testSoundPackResolverPrefersToolSpecificFiles),
     ("CLI parses the universal report command", testCLIParsesUniversalReport),
+    ("codex quota reads the newest rate limits", testCodexQuotaReadsTheNewestRateLimits),
 ]
 
 if CommandLine.arguments.count == 3,
@@ -7785,4 +7786,28 @@ func testCLIParsesUniversalReport() throws {
         _ = try CLICommand.parse(arguments: ["report", "--tool", "x", "--session", "s", "--status", "banana"])
         throw TestFailure.expectation("unknown status must be rejected")
     } catch is CLIError {}
+}
+
+func testCodexQuotaReadsTheNewestRateLimits() throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let day = root.appendingPathComponent("2026/07/29", isDirectory: true)
+    try FileManager.default.createDirectory(at: day, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let lines = [
+        #"{"type":"event_msg","payload":{"type":"token_count","rate_limits":{"plan_type":"free","primary":{"used_percent":5.0,"window_minutes":43200,"resets_at":1}}}}"#,
+        #"{"type":"event_msg","payload":{"type":"other"}}"#,
+        #"{"type":"event_msg","payload":{"type":"token_count","rate_limits":{"plan_type":"free","primary":{"used_percent":12.5,"window_minutes":43200,"resets_at":2}}}}"#,
+    ]
+    try (lines.joined(separator: "\n") + "\n").write(
+        to: day.appendingPathComponent("rollout-2026-07-29T10-00-00-abc.jsonl"),
+        atomically: true, encoding: .utf8)
+
+    guard let snapshot = CodexQuota.latest(sessionsDirectory: root) else {
+        throw TestFailure.expectation("quota not found in a directory with rate limits")
+    }
+    try expect(snapshot.usedPercent, equals: 12.5, "the LAST rate_limits line wins")
+    try expect(snapshot.planType, equals: "free", "plan type carried through")
+    try expect(CodexQuota.latest(sessionsDirectory: root.appendingPathComponent("empty")) == nil,
+               equals: true, "no rollouts means no snapshot, not zero")
 }
