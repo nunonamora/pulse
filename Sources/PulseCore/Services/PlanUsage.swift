@@ -8,9 +8,11 @@ import Foundation
 /// consumo a subir É o aviso.
 ///
 /// Honestidade primeiro: os tetos exatos de cada plano não são públicos nem
-/// estáveis, por isso isto NÃO mostra percentagens de um denominador
-/// inventado — mostra o consumo real (respostas e tokens), que é factual e
-/// chega para calibrar o instinto de "ainda dá / está quase".
+/// estáveis, por isso isto mede só o consumo real — respostas, tokens,
+/// sessões — que é factual. Transformar isso em percentagem exige um
+/// denominador, e esse é uma escolha explícita de quem usa a app: vive no
+/// `QuotaWindow`, a partir do plano escolhido nas definições, e não existe
+/// enquanto ninguém o escolher.
 ///
 /// A fonte são os transcripts locais de todos os projetos. Só ficheiros
 /// tocados dentro da janela entram, e cada um é lido de trás para a frente em
@@ -34,6 +36,11 @@ public enum PlanUsage {
         /// transcripts — só muda o `model`. Discriminar aqui é o que torna a
         /// quota multi-fornecedor verdadeira em vez de um rótulo.
         public let byProvider: [String: Int]
+        /// Os instantes de cada pedido dentro da janela. Servem ao
+        /// `QuotaWindow` para descobrir onde a janela abriu — e recolhem-se
+        /// aqui porque isto já percorre estas linhas todas; reler os
+        /// transcripts só para carimbos seria pagar duas vezes o mesmo.
+        public var timestamps: [Date] = []
     }
 
     /// De que fornecedor veio este modelo. Prefixos e não igualdade: os nomes
@@ -58,6 +65,7 @@ public enum PlanUsage {
         let windowStart = now.addingTimeInterval(-hours * 3600)
         var responses = 0, tokens = 0, sessions = 0
         var byProvider: [String: Int] = [:]
+        var timestamps: [Date] = []
 
         let files = (try? FileManager.default.contentsOfDirectory(
             at: projectsDirectory, includingPropertiesForKeys: [.contentModificationDateKey]
@@ -70,17 +78,18 @@ public enum PlanUsage {
                 guard let modified = try? transcript.resourceValues(
                     forKeys: [.contentModificationDateKey]
                 ).contentModificationDate, modified > windowStart else { continue }
-                let (r, t, providers) = tally(transcript, since: windowStart)
+                let (r, t, providers, stamps) = tally(transcript, since: windowStart)
                 if r > 0 {
                     responses += r
                     tokens += t
                     sessions += 1
                     byProvider.merge(providers, uniquingKeysWith: +)
+                    timestamps.append(contentsOf: stamps)
                 }
             }
         }
         return Burn(responses: responses, tokens: tokens, sessions: sessions,
-                    byProvider: byProvider)
+                    byProvider: byProvider, timestamps: timestamps)
     }
 
     /// Lê o ficheiro do fim para o princípio, em blocos de 1 MB, e para no
@@ -89,8 +98,9 @@ public enum PlanUsage {
     /// de bloquear, que é a troca certa para um mostrador.
     private static func tally(
         _ url: URL, since windowStart: Date
-    ) -> (Int, Int, [String: Int]) {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return (0, 0, [:]) }
+    ) -> (Int, Int, [String: Int], [Date]) {
+        guard let handle = try? FileHandle(forReadingFrom: url)
+        else { return (0, 0, [:], []) }
         defer { try? handle.close() }
         let size = (try? handle.seekToEnd()) ?? 0
         let chunk: UInt64 = 1024 * 1024
@@ -98,6 +108,7 @@ public enum PlanUsage {
 
         var responses = 0, tokens = 0
         var byProvider: [String: Int] = [:]
+        var timestamps: [Date] = []
         var end = size
         let boundary = iso8601(windowStart)
 
@@ -122,6 +133,7 @@ public enum PlanUsage {
                       let usage = message["usage"] as? [String: Any]
                 else { continue }
                 responses += 1
+                if let date = parse(stamp) { timestamps.append(date) }
                 let lineTokens = (usage["input_tokens"] as? Int ?? 0)
                     + (usage["cache_creation_input_tokens"] as? Int ?? 0)
                     + (usage["output_tokens"] as? Int ?? 0)
@@ -133,7 +145,16 @@ public enum PlanUsage {
             if !sawInside && start < end { break }   // já saímos da janela
             end = start
         }
-        return (responses, tokens, byProvider)
+        return (responses, tokens, byProvider, timestamps)
+    }
+
+    /// ISO-8601 com e sem fração de segundo — os transcripts trazem as duas
+    /// formas consoante a versão que os escreveu.
+    private static func parse(_ value: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: value) { return date }
+        return ISO8601DateFormatter().date(from: value)
     }
 
     private static func field(_ line: Substring, _ key: String) -> String? {

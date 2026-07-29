@@ -7641,6 +7641,19 @@ let tests: [(String, () throws -> Void)] = [
     ("context meter reads the newest usage from the tail", testContextMeterReadsLatestUsageFromTail),
     ("plan usage sums only the five-hour window", testPlanUsageSumsOnlyTheWindow),
     ("subagent meter counts only unfinished tasks", testSubagentMeterCountsOnlyUnfinishedTasks),
+    ("session meta labels model and effort", testSessionMetaLabelsModelAndEffort),
+    ("quota window anchors on first request", testQuotaWindowAnchorsOnFirstRequestOfWindow),
+    ("quota window without plan has no percentage", testQuotaWindowWithoutPlanHasNoPercentage),
+    ("quota window ignores closed windows", testQuotaWindowIgnoresClosedWindows),
+    ("quota countdown formats", testQuotaCountdownFormats),
+    ("task list reads TodoWrite snapshot", testTaskListReadsTodoWriteSnapshot),
+    ("task list summary omits empty buckets", testTaskListSummaryOmitsEmptyBuckets),
+    ("task list folds incremental task tools", testTaskListFoldsIncrementalTaskTools),
+    ("task list is nil when never written", testTaskListIsNilWhenAgentNeverWroteOne),
+    ("roster separates team from subagents", testSubagentRosterSeparatesTeamFromSubagents),
+    ("roster reads spawn and death signals", testSubagentRosterReadsSpawnAndDeathSignals),
+    ("roster labels activity", testSubagentRosterLabelsActivity),
+    ("roster elapsed label", testSubagentRosterElapsedLabel),
     ("sound pack resolver prefers tool-specific files", testSoundPackResolverPrefersToolSpecificFiles),
     ("CLI parses the universal report command", testCLIParsesUniversalReport),
     ("codex quota reads the newest rate limits", testCodexQuotaReadsTheNewestRateLimits),
@@ -7965,4 +7978,183 @@ func testQuestionBoxLifecycle() throws {
 
     box.clear(sessionID: "s/unsafe")
     try expect(box.pending().isEmpty, equals: true, "cleared question is gone")
+}
+
+// MARK: - Paridade visual: modelo, esforço, janelas, tarefas e agentes
+
+func testSessionMetaLabelsModelAndEffort() throws {
+    try expect(SessionMeta.modelLabel("claude-opus-5"), equals: "Opus 5", "família e versão")
+    try expect(SessionMeta.modelLabel("claude-haiku-4-5-20251001"), equals: "Haiku 4.5",
+               "a data de compilação não é informação para uma linha de 18 pontos")
+    try expect(SessionMeta.modelLabel("gpt-5"), equals: "Gpt 5", "modelos de fora também")
+    try expect(SessionMeta.effortLabel("xhigh"), equals: "XHigh", "a maiúscula ao meio")
+    try expect(SessionMeta.effortLabel(""), equals: nil, "vazio não é esforço")
+
+    try expect(SessionMeta.Reading(model: "Opus 5", effort: "XHigh").chip,
+               equals: "Opus 5 · XHigh", "o chip junta os dois")
+    try expect(SessionMeta.Reading(model: "Opus 5", effort: nil).chip,
+               equals: "Opus 5", "sem esforço não sobra o separador pendurado")
+    try expect(SessionMeta.Reading(model: nil, effort: nil).chip,
+               equals: nil, "sem nada não há chip")
+}
+
+func testQuotaWindowAnchorsOnFirstRequestOfWindow() throws {
+    // Três pedidos há muito tempo, e depois dois recentes. A janela corrente
+    // abre no primeiro dos recentes, não no primeiro de todos — é essa a
+    // diferença entre uma janela rolante e um intervalo fixo.
+    let now = Date()
+    let old = now.addingTimeInterval(-20 * 3600)
+    let opened = now.addingTimeInterval(-2 * 3600)
+    let stamps = [
+        old, old.addingTimeInterval(60), old.addingTimeInterval(120),
+        opened, opened.addingTimeInterval(300),
+    ]
+    let window = QuotaWindow.current(
+        timestamps: stamps, tokens: 1_000_000, hours: 5, plan: .max5, now: now)
+    guard let window else { throw TestFailure.expectation("window should exist") }
+    try expect(abs(window.opened.timeIntervalSince(opened)) < 1, equals: true,
+               "a âncora é o primeiro pedido da janela em curso")
+    try expect(window.countdown(now: now), equals: "3h0m", "faltam três horas")
+    try expect(window.fraction.map { Int($0 * 100) }, equals: 5,
+               "1M de um teto estimado de 20M")
+}
+
+func testQuotaWindowWithoutPlanHasNoPercentage() throws {
+    let now = Date()
+    let window = QuotaWindow.current(
+        timestamps: [now.addingTimeInterval(-600)], tokens: 999_999,
+        hours: 5, plan: .none, now: now)
+    try expect(window?.fraction, equals: nil,
+               "sem plano escolhido não se inventa denominador")
+}
+
+func testQuotaWindowIgnoresClosedWindows() throws {
+    let now = Date()
+    // Último pedido há seis horas: a janela de cinco já fechou.
+    let window = QuotaWindow.current(
+        timestamps: [now.addingTimeInterval(-6 * 3600)], tokens: 100,
+        hours: 5, plan: .max5, now: now)
+    try expect(window, equals: nil, "uma janela fechada não é a janela corrente")
+}
+
+func testQuotaCountdownFormats() throws {
+    let now = Date()
+    func countdown(_ seconds: TimeInterval) -> String {
+        QuotaWindow.Window(
+            opened: now, resets: now.addingTimeInterval(seconds),
+            tokens: 0, fraction: nil
+        ).countdown(now: now)
+    }
+    try expect(countdown(5 * 86400 + 16 * 3600), equals: "5d16h", "dias e horas")
+    try expect(countdown(2 * 3600 + 14 * 60), equals: "2h14m", "horas e minutos")
+    try expect(countdown(12 * 60), equals: "12m", "só minutos")
+}
+
+func testTaskListReadsTodoWriteSnapshot() throws {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("\(UUID().uuidString).jsonl")
+    defer { try? FileManager.default.removeItem(at: url) }
+    // Duas chamadas: a segunda substitui a primeira por inteiro.
+    let lines = [
+        #"{"message":{"content":[{"type":"tool_use","name":"TodoWrite","input":{"todos":[{"content":"antiga","status":"pending"}]}}]}}"#,
+        #"{"message":{"content":[{"type":"tool_use","name":"TodoWrite","input":{"todos":[{"content":"Auditar login","status":"in_progress"},{"content":"Testes","status":"pending"},{"content":"Mapear estado","status":"completed"}]}}]}}"#,
+    ]
+    try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+
+    guard let list = TaskListMeter.list(transcriptPath: url.path) else {
+        throw TestFailure.expectation("todo list should be read")
+    }
+    try expect(list.items.count, equals: 3, "a última chamada é o estado")
+    try expect(list.items.first?.title, equals: "Auditar login", "ordem preservada")
+    try expect(list.inProgress, equals: 1, "uma em curso")
+    try expect(list.completed, equals: 1, "uma concluída")
+    try expect(list.summary(), equals: "1 done, 1 in progress, 1 open", "o resumo")
+}
+
+func testTaskListSummaryOmitsEmptyBuckets() throws {
+    let list = TaskListMeter.List(items: [
+        .init(id: "1", title: "a", status: .pending),
+        .init(id: "2", title: "b", status: .pending),
+    ])
+    try expect(list.summary(), equals: "2 open",
+               "um \"0 concluídas\" seria ruído a ocupar a linha")
+}
+
+func testTaskListFoldsIncrementalTaskTools() throws {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("\(UUID().uuidString).jsonl")
+    defer { try? FileManager.default.removeItem(at: url) }
+    let lines = [
+        #"{"message":{"content":[{"type":"tool_use","name":"TaskCreate","input":{"subject":"Primeira"}}]}}"#,
+        #"{"message":{"content":[{"type":"tool_use","name":"TaskCreate","input":{"subject":"Segunda"}}]}}"#,
+        #"{"message":{"content":[{"type":"tool_use","name":"TaskUpdate","input":{"taskId":"1","status":"completed"}}]}}"#,
+    ]
+    try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+
+    guard let list = TaskListMeter.list(transcriptPath: url.path) else {
+        throw TestFailure.expectation("incremental list should be read")
+    }
+    try expect(list.items.count, equals: 2, "duas criadas")
+    try expect(list.items[0].status, equals: .completed, "a atualização apanhou a primeira")
+    try expect(list.items[1].status, equals: .pending, "a segunda continua aberta")
+}
+
+func testTaskListIsNilWhenAgentNeverWroteOne() throws {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("\(UUID().uuidString).jsonl")
+    defer { try? FileManager.default.removeItem(at: url) }
+    try #"{"message":{"content":[{"type":"text","text":"olá"}]}}"#
+        .write(to: url, atomically: true, encoding: .utf8)
+    try expect(TaskListMeter.list(transcriptPath: url.path), equals: nil,
+               "lista inexistente não é lista vazia — vazia diria \"não há trabalho\"")
+}
+
+func testSubagentRosterSeparatesTeamFromSubagents() throws {
+    try expect(SubagentRoster.origin(of: "a9324e7a4bb444192"),
+               equals: .subagent, "id opaco é subagente")
+    try expect(SubagentRoster.origin(of: "audit-vi-diff@session-61c74167"),
+               equals: .team(session: "session-61c74167"),
+               "a forma do identificador É a origem")
+}
+
+func testSubagentRosterReadsSpawnAndDeathSignals() throws {
+    try expect(
+        SubagentRoster.agentID(in: ["content": "Async agent launched.\nagentId: abc123\n"]),
+        equals: "abc123", "grafia dos agentes em segundo plano")
+    try expect(
+        SubagentRoster.agentID(in: ["content": [["text": "Spawned.\nagent_id: n@s\n"]]]),
+        equals: "n@s", "grafia dos agentes de equipa")
+    try expect(SubagentRoster.agentID(in: ["content": "sem id"]), equals: nil,
+               "um resultado sem id não faz nascer agente nenhum")
+
+    let line = Substring(
+        "<task-notification><task-id>abc</task-id><status>completed</status>"
+        + "<task-id>def</task-id><status>killed</status></task-notification>")
+    try expect(SubagentRoster.finishedIDs(in: line), equals: ["abc", "def"],
+               "qualquer estado significa \"já não corre\"")
+}
+
+func testSubagentRosterLabelsActivity() throws {
+    try expect(SubagentRoster.label(tool: "Bash", input: ["command": "swift build\n-v"]),
+               equals: "$ swift build -v", "comandos levam $ e cabem numa linha")
+    try expect(SubagentRoster.label(tool: "Read", input: ["file_path": "/a/b/VITheme.swift"]),
+               equals: "Read: VITheme.swift",
+               "o caminho completo não cabe e a pasta raramente é a dúvida")
+    try expect(SubagentRoster.label(tool: "Grep", input: ["pattern": "handleRequest"]),
+               equals: "Grep: handleRequest", "padrões mostram-se inteiros")
+    try expect(SubagentRoster.label(tool: "WeirdTool", input: [:]),
+               equals: "WeirdTool", "uma ferramenta desconhecida diz o nome dela")
+}
+
+func testSubagentRosterElapsedLabel() throws {
+    func label(_ seconds: TimeInterval) -> String? {
+        SubagentRoster.Agent(
+            id: "x", name: "n", type: "t", description: "d", origin: .subagent,
+            elapsed: seconds, activity: nil, model: nil
+        ).elapsedLabel
+    }
+    try expect(label(8), equals: "8s", "segundos")
+    try expect(label(468), equals: "7m 48s", "minutos e segundos")
+    try expect(label(3900), equals: "1h 5m", "horas e minutos")
+    try expect(label(0.4), equals: nil, "acabado de nascer não tem tempo a mostrar")
 }

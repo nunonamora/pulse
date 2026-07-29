@@ -118,6 +118,12 @@ struct NotchWidgetView: View {
     @State private var planBurnAt: Date = .distantPast
     /// A quota do Codex, dita pela OpenAI nos rollouts locais.
     @State private var codexQuota: CodexQuota.Snapshot?
+    /// As duas janelas de limite, já com o instante de renovação resolvido.
+    /// A de sete dias é a que se esquece: um dia de trabalho intenso não gasta
+    /// a semana, mas quatro gastam — e quando dá pelo limite semanal já é
+    /// tarde para reorganizar nada.
+    @State private var fiveHourWindow: QuotaWindow.Window?
+    @State private var weeklyWindow: QuotaWindow.Window?
     /// As decisões lidas do disco, tal como estavam quando abriste o histórico.
     ///
     /// Lidas de uma vez e guardadas aqui, e não perguntadas ao store dentro do
@@ -457,10 +463,22 @@ struct NotchWidgetView: View {
                 planBurnAt = Date()
                 Task.detached(priority: .utility) {
                     let burn = PlanUsage.currentWindow()
+                    let week = PlanUsage.currentWindow(hours: 168)
                     let quota = CodexQuota.latest()
+                    let plan = QuotaWindow.Plan(
+                        rawValue: UserDefaults.standard.string(forKey: "quotaPlan") ?? ""
+                    ) ?? .none
+                    let short = QuotaWindow.current(
+                        timestamps: burn.timestamps, tokens: burn.tokens,
+                        hours: 5, plan: plan)
+                    let long = QuotaWindow.current(
+                        timestamps: week.timestamps, tokens: week.tokens,
+                        hours: 168, plan: plan, weekly: true)
                     await MainActor.run {
                         planBurn = burn
                         codexQuota = quota
+                        fiveHourWindow = short
+                        weeklyWindow = long
                     }
                 }
             }
@@ -634,15 +652,17 @@ struct NotchWidgetView: View {
                         Image(systemName: "sparkle")
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(Color(red: 0.98, green: 0.63, blue: 0.25))
-                        Text("5h")
-                            .font(VITheme.mono(12, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.9))
-                        Text(burnLabel(burn).replacingOccurrences(of: " · 5h", with: ""))
-                            .font(VITheme.mono(12, weight: .semibold))
-                            .foregroundStyle(Color(red: 0.30, green: 0.82, blue: 0.42))
-                        Text("\(burn.responses)r")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.45))
+                        QuotaWindowLabel(
+                            name: "5h", window: fiveHourWindow,
+                            fallback: burnLabel(burn)
+                                .replacingOccurrences(of: " · 5h", with: ""))
+                        if let weeklyWindow {
+                            Text("|")
+                                .font(VITheme.mono(11))
+                                .foregroundStyle(.white.opacity(0.25))
+                            QuotaWindowLabel(
+                                name: "7d", window: weeklyWindow, fallback: nil)
+                        }
                         if let quota = codexQuota {
                             Text("|")
                                 .font(VITheme.mono(11))
@@ -1517,6 +1537,12 @@ private struct SessionRow: View {
     @State private var contextReading: ContextMeter.Reading?
     /// Subagentes vivos: tool_use da Task sem o seu tool_result.
     @State private var liveSubagents = 0
+    /// Quem são os agentes vivos — nome, tarefa e o que estão a fazer.
+    @State private var roster: [SubagentRoster.Agent] = []
+    /// O plano que o agente escreveu para si próprio, quando escreveu algum.
+    @State private var taskList: TaskListMeter.List?
+    /// O modelo e o esforço de raciocínio desta sessão.
+    @State private var meta: SessionMeta.Reading?
     @State private var mode: ActionMode = .menu
     @State private var renameDraft = ""
     /// O feedback da cópia vive aqui, na linha, pela mesma razão que o
@@ -1558,6 +1584,26 @@ private struct SessionRow: View {
                 if !isStaticRender {
                     RightClickCatcher(onRightClick: toggleActions)
                 }
+            }
+            // O plano e a equipa desta sessão, recuados para se lerem como
+            // conteúdo dela e não como mais linhas da lista.
+            if let taskList, !taskList.items.isEmpty {
+                TaskListCard(list: taskList)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 6)
+            }
+            if !effectiveRoster.isEmpty {
+                let groups = SubagentRoster.grouped(effectiveRoster)
+                VStack(spacing: 6) {
+                    ForEach(groups.teams, id: \.session) { team in
+                        AgentRosterCard(agents: team.agents, team: team.session)
+                    }
+                    if !groups.subagents.isEmpty {
+                        AgentRosterCard(agents: groups.subagents, team: nil)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
             }
             if isActionsExpanded {
                 actionArea
@@ -1603,13 +1649,24 @@ private struct SessionRow: View {
         // is discarded on close so a later open sees branch switches.
         .task(id: session.updatedAt) { [path = session.transcriptPath] in
             guard let path else { return }
-            let (reading, subagents) = await Task.detached(priority: .utility) {
-                (ContextMeter.reading(transcriptPath: path),
-                 SubagentMeter.liveCount(transcriptPath: path))
+            // Tudo numa só ida ao disco em segundo plano: são cinco leituras
+            // da cauda do mesmo ficheiro, e reparti-las por cinco tarefas só
+            // multiplicaria as trocas de contexto para chegar ao mesmo sítio.
+            let loaded = await Task.detached(priority: .utility) {
+                (context: ContextMeter.reading(transcriptPath: path),
+                 count: SubagentMeter.liveCount(transcriptPath: path),
+                 roster: SubagentRoster.roster(transcriptPath: path),
+                 tasks: TaskListMeter.list(transcriptPath: path),
+                 meta: SessionMeta.reading(transcriptPath: path))
             }.value
             guard !Task.isCancelled else { return }
-            contextReading = reading
-            liveSubagents = subagents
+            contextReading = loaded.context
+            // O roster é o número verdadeiro quando existe: a contagem antiga
+            // não vê agentes em segundo plano (ver SubagentRoster).
+            liveSubagents = loaded.roster.isEmpty ? loaded.count : loaded.roster.count
+            roster = loaded.roster
+            taskList = loaded.tasks
+            meta = loaded.meta
         }
         .task(id: session.currentStep == nil ? session.cwd : nil) { [cwd = session.cwd] in
             branchName = nil
@@ -1629,6 +1686,22 @@ private struct SessionRow: View {
             return ContextMeter.reading(transcriptPath: path)
         }
         return contextReading
+    }
+
+    /// No retrato lê-se em linha, pela mesma razão que o `effectiveReading`:
+    /// fora de ecrã não há ciclo de execução para o `.task` correr.
+    private var effectiveRoster: [SubagentRoster.Agent] {
+        if isStaticRender, let path = session.transcriptPath {
+            return SubagentRoster.roster(transcriptPath: path)
+        }
+        return roster
+    }
+
+    private var effectiveMeta: SessionMeta.Reading? {
+        if isStaticRender, let path = session.transcriptPath {
+            return SessionMeta.reading(transcriptPath: path)
+        }
+        return meta
     }
 
     /// A pasta acrescenta alguma coisa ao que o título já diz?
@@ -1744,6 +1817,12 @@ private struct SessionRow: View {
             // Chips à Vibe Island: ferramenta e terminal em cápsulas cinza.
             // Dizem "quem e onde" sem gastar a linha de contexto.
             InfoChip(text: session.tool.chipName)
+            // O modelo e o esforço: dois agentes lado a lado num Opus e num
+            // Haiku não são a mesma coisa, e o esforço explica sozinho porque
+            // é que um demora cinco vezes mais.
+            if let chip = effectiveMeta?.chip {
+                InfoChip(text: chip)
+            }
             if let terminalName = session.terminal.chipName {
                 InfoChip(text: terminalName)
             }
