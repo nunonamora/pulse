@@ -306,7 +306,13 @@ struct NotchWidgetView: View {
                                 }
                             },
                             toggleHistory: toggleHistory,
-                            isRemoteSession: { store.isRemote($0) }
+                            isRemoteSession: { store.isRemote($0) },
+                            // Uma decisão registada que seja chega para provar
+                            // que a app já viveu; pedir só uma é o mínimo de
+                            // leitura que responde à pergunta.
+                            hasDecisionHistory: {
+                                !store.recentDecisions(limit: 1).isEmpty
+                            }
                         )
                         .frame(width: menuContentWidth)
                         .frame(width: menuWidth, alignment: .center)
@@ -1232,7 +1238,15 @@ private struct SessionMenuCard: View {
     /// O distintivo remoto vem do store, que sabe de que diretório cada
     /// sessão veio; a lista só pergunta.
     var isRemoteSession: (AgentSession) -> Bool = { _ in false }
+    /// "Já houve vida aqui?" — decide entre o cartão de entrada e o vazio
+    /// discreto. É uma closure e não um Bool para a leitura de disco só
+    /// acontecer quando o vazio aparece, e não em cada redesenho do painel.
+    var hasDecisionHistory: () -> Bool = { false }
     @State private var errorMessage: String?
+    /// Avaliado uma vez ao aparecer, nunca no corpo: o corpo redesenha-se
+    /// dezenas de vezes por segundo com o ponteiro, e a pergunta "há
+    /// histórico?" é uma ida ao disco.
+    @State private var showsEntryCard = false
     // At most one row shows its inline actions; opening another closes it.
     @State private var actionsSessionID: String?
     /// A linha sob o teclado.
@@ -1253,18 +1267,30 @@ private struct SessionMenuCard: View {
                 // Um ecrã vazio diz o que fazer a seguir. "No active sessions"
                 // descrevia o nada e deixava quem chega aqui pela primeira vez
                 // sem saber se a app está avariada ou apenas à espera.
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Nothing running")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.7))
-                    Text("Start Claude, Codex or OpenCode in a terminal and it shows up here.")
-                        .font(.system(size: 11))
-                        // 0,52 e não 0,42. Medido sobre o retrato: a 0,42 dava
-                        // 4,1:1 de contraste, abaixo do 4,5 que texto corrido
-                        // precisa. É a única frase da app que alguém lê de
-                        // primeira vez, e era a menos legível de todas.
-                        .foregroundStyle(.white.opacity(0.52))
-                        .fixedSize(horizontal: false, vertical: true)
+                //
+                // Dois vazios diferentes de propósito: para quem nunca viu uma
+                // sessão, o cartão de entrada com a criatura a acenar — é a
+                // primeira conversa da app. Para quem já tem histórico, o
+                // aviso discreto de sempre: ser recebido duas vezes é ser
+                // interrompido.
+                Group {
+                    if showsEntryCard {
+                        EntryCard()
+                    } else {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Nothing running")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.7))
+                            Text("Start Claude, Codex or OpenCode in a terminal and it shows up here.")
+                                .font(.system(size: 11))
+                                // 0,52 e não 0,42. Medido sobre o retrato: a 0,42 dava
+                                // 4,1:1 de contraste, abaixo do 4,5 que texto corrido
+                                // precisa. É a única frase da app que alguém lê de
+                                // primeira vez, e era a menos legível de todas.
+                                .foregroundStyle(.white.opacity(0.52))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
                 // 12 e não 14: com o contentor a 4 e o gutter a 22, é o que
                 // alinha este texto na coluna dos 38 pt das outras superfícies.
@@ -1354,6 +1380,9 @@ private struct SessionMenuCard: View {
         .onAppear {
             if selectedID == nil { selectedID = sessions.first?.id }
             if keyboardActive { listFocused = true }
+            // Só se pergunta pelo histórico quando a resposta muda alguma
+            // coisa: com sessões na lista, o vazio nunca se desenha.
+            if sessions.isEmpty { showsEntryCard = !hasDecisionHistory() }
         }
         .onChange(of: keyboardActive) { _, active in listFocused = active }
         .onChange(of: sessions.map(\.id)) { _, ids in
@@ -2382,6 +2411,11 @@ enum UIRender {
             ),
             width: 800, name: "question"
         )
+
+        // O onboarding no passo das boas-vindas: com `isStaticRender` o elenco
+        // já está em palco, por isso o retrato mostra o cartaz completo em vez
+        // do instante antes da entrada.
+        render(OnboardingView(step: .welcome), width: 560, name: "onboarding")
 
         // Os feixes de luz, congelados a meio do voo (progress 0,55): é o
         // único instante em que um efeito transitório se deixa retratar.
