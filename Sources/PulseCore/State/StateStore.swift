@@ -82,6 +82,39 @@ public final class StateStore {
     public var pendingDecision: PermissionRequest? { pendingDecisions.first }
     public var hasPendingDecision: Bool { !pendingDecisions.isEmpty }
 
+    // MARK: - Sessões remotas
+
+    /// Diretorios de estado adicionais — tipicamente um `~/.pulse/state`
+    /// remoto montado por SSHFS ou sincronizado (ver scripts/pulse-remote.sh).
+    ///
+    /// É o "agentes em servidores remotos" feito à maneira da casa: o
+    /// protocolo inteiro já era ficheiros com escrita atómica, e ficheiros
+    /// montam-se. As sessões de lá aparecem aqui; as aprovações escrevem-se
+    /// no MESMO diretório e o hook remoto apanha-as quando o sync as levar.
+    /// A reconexão automática pertence ao transporte (sshfs -o reconnect, ou
+    /// o loop do script), não a esta app — cada um faz o seu ofício.
+    public static let remoteDirectoriesKey = "remoteStateDirs"
+
+    private var remoteRepositories: [StateRepository] {
+        let raw = UserDefaults.standard.stringArray(forKey: Self.remoteDirectoriesKey) ?? []
+        return raw
+            .map { ($0 as NSString).expandingTildeInPath }
+            .filter { !$0.isEmpty }
+            .map { StateRepository(directoryURL: URL(fileURLWithPath: $0, isDirectory: true)) }
+    }
+
+    /// Ids das sessões vindas de diretórios remotos — as linhas usam isto para
+    /// o distintivo e para não prometer um salto de foco que não existe cá.
+    public private(set) var remoteSessionIDs: Set<String> = []
+
+    /// De que diretório veio cada pedido pendente: a resposta tem de voltar
+    /// para o MESMO sítio, senão o hook remoto nunca a vê.
+    private var pendingDecisionOrigins: [String: URL] = [:]
+
+    public func isRemote(_ session: AgentSession) -> Bool {
+        remoteSessionIDs.contains(session.id)
+    }
+
     private var broker: PermissionBroker { PermissionBroker(stateDirectory: repository.directoryURL) }
 
     /// O registo do que decidiste, ao lado do diretório de estado e nunca lá
@@ -104,7 +137,10 @@ public final class StateStore {
     /// Responde ao pedido. O hook está a sondar e apanha isto em menos de um
     /// décimo de segundo.
     public func decide(_ request: PermissionRequest, _ decision: PermissionDecision) {
-        try? broker.reply(to: request.id, decision: decision)
+        // A resposta volta para o diretório de onde o pedido veio — num pedido
+        // remoto, é o sync que a leva até ao hook do outro lado.
+        let origin = pendingDecisionOrigins[request.id] ?? repository.directoryURL
+        try? PermissionBroker(stateDirectory: origin).reply(to: request.id, decision: decision)
         decisionLog.record(request, decision)
         pendingDecisions.removeAll { $0.id == request.id }
     }
@@ -125,8 +161,30 @@ public final class StateStore {
         // Os pedidos chegam pelo mesmo ciclo que as sessões: o hook faz post na
         // notificação Darwin depois de escrever, e o observador de diretório
         // apanha o ficheiro. Não é preciso um segundo mecanismo.
-        pendingDecisions = broker.pendingRequests()
-        sessions = try repository.loadSessions()
+        var decisions = broker.pendingRequests()
+        var origins: [String: URL] = [:]
+        for request in decisions { origins[request.id] = repository.directoryURL }
+
+        var merged = try repository.loadSessions()
+        var remoteIDs: Set<String> = []
+        for remote in remoteRepositories {
+            // Um remoto avariado (montagem caída, sync parado) não pode
+            // derrubar a lista local: o que se perde é a visibilidade DELE.
+            guard let sessions = try? remote.loadSessions() else { continue }
+            for session in sessions {
+                merged.append(session)
+                remoteIDs.insert(session.id)
+            }
+            let remoteBroker = PermissionBroker(stateDirectory: remote.directoryURL)
+            for request in remoteBroker.pendingRequests() {
+                decisions.append(request)
+                origins[request.id] = remote.directoryURL
+            }
+        }
+        pendingDecisions = decisions
+        pendingDecisionOrigins = origins
+        remoteSessionIDs = remoteIDs
+        sessions = merged
             .filter { $0.status != .ended }
             .sorted(by: Self.precedes)
         acknowledgments.prune(keeping: sessions)

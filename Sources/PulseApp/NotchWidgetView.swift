@@ -287,7 +287,8 @@ struct NotchWidgetView: View {
                                     settleAfterDetachedInteraction()
                                 }
                             },
-                            toggleHistory: toggleHistory
+                            toggleHistory: toggleHistory,
+                            isRemoteSession: { store.isRemote($0) }
                         )
                         .frame(width: menuContentWidth)
                         .frame(width: menuWidth, alignment: .center)
@@ -1176,6 +1177,9 @@ private struct SessionMenuCard: View {
     let onRowInteractionChange: (Bool) -> Void
     /// A tecla H entrega aqui; quem sabe trocar de vista é a vista-mãe.
     var toggleHistory: () -> Void = {}
+    /// O distintivo remoto vem do store, que sabe de que diretório cada
+    /// sessão veio; a lista só pergunta.
+    var isRemoteSession: (AgentSession) -> Bool = { _ in false }
     @State private var errorMessage: String?
     // At most one row shows its inline actions; opening another closes it.
     @State private var actionsSessionID: String?
@@ -1329,6 +1333,7 @@ private struct SessionMenuCard: View {
             renamePrefill: overrideName(session) ?? "",
             isActionsExpanded: actionsSessionID == session.id,
             isSelected: selectedID == session.id,
+            isRemote: isRemoteSession(session),
             shortcutDigit: shortcutDigit(for: session),
             toggleActions: { toggleActions(for: session) },
             focus: focusSession,
@@ -1402,6 +1407,9 @@ private struct SessionRow: View {
     /// — "é esta" — e duas linguagens para a mesma ideia obrigavam a aprender
     /// duas.
     let isSelected: Bool
+    /// Sessão vinda de um diretório remoto: leva distintivo, e o salto de foco
+    /// não se promete — o painel dela vive noutro Mac.
+    var isRemote: Bool = false
     /// O dígito de ⌘N desta linha, ou nada quando o teclado não manda na lista.
     let shortcutDigit: Int?
     let toggleActions: () -> Void
@@ -1609,6 +1617,15 @@ private struct SessionRow: View {
                     // Subagentes vivos: só aparecem enquanto existem, e só
                     // numa sessão a trabalhar — depois do turno acabar o
                     // número seria arqueologia, não estado.
+                    if isRemote {
+                        if showsFolder || session.currentStep != nil || branchName != nil {
+                            Text("·")
+                        }
+                        Image(systemName: "network")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text("remote")
+                            .font(.system(size: 11, design: .monospaced))
+                    }
                     if liveSubagents > 0, session.status == .working {
                         if showsFolder || session.currentStep != nil || branchName != nil {
                             Text("·")

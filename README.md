@@ -57,6 +57,12 @@ closes, `⌘1–9` jump directly, `H` flips to history. Jumping lands on the
 *exact* pane — including the right tab and split inside
 [cmux](https://cmux.dev), via the surface ids its environment exports.
 
+**Watch agents on remote servers.** `./scripts/pulse-remote.sh user@host`
+mounts the server's Pulse state over SSHFS with auto-reconnect and registers
+it. Remote sessions show up with a `remote` badge, and approving a remote
+permission request writes the reply into the mounted directory — the same
+file protocol, across the wire. Requires Pulse hooks installed on the server.
+
 **Hear it, in Portuguese.** Optional per-tool voices with signature chimes,
 silent during Do Not Disturb, calls, and whenever you're already looking at
 that terminal.

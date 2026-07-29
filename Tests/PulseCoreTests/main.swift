@@ -7646,6 +7646,7 @@ let tests: [(String, () throws -> Void)] = [
     ("codex quota reads the newest rate limits", testCodexQuotaReadsTheNewestRateLimits),
     ("focus planner targets WezTerm and Kitty precisely", testFocusPlannerTargetsWezTermAndKittyPrecisely),
     ("reply service escapes hostile text", testReplyServiceEscapesHostileText),
+    ("state store merges remote directories", testStateStoreMergesRemoteDirectories),
 ]
 
 if CommandLine.arguments.count == 3,
@@ -7884,4 +7885,59 @@ func testReplyServiceEscapesHostileText() throws {
         cwd: "/tmp", startedAt: Date(), updatedAt: Date())
     try expect(ReplyService.canReply(to: sessionWithout), equals: false,
                "sessions without a cmux surface cannot reply")
+}
+
+@MainActor
+func testStateStoreMergesRemoteDirectories() throws {
+    let localDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let remoteDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer {
+        try? FileManager.default.removeItem(at: localDirectory)
+        try? FileManager.default.removeItem(at: remoteDirectory)
+        UserDefaults.standard.removeObject(forKey: StateStore.remoteDirectoriesKey)
+    }
+    let local = StateRepository(directoryURL: localDirectory)
+    let remote = StateRepository(directoryURL: remoteDirectory)
+    func session(_ id: String) throws -> AgentSession {
+        try AgentSession.decode(from: validStateJSON(sessionID: id, status: "working"))
+    }
+    try local.save(session("local-a"))
+    try remote.save(session("remote-b"))
+    UserDefaults.standard.set([remoteDirectory.path], forKey: StateStore.remoteDirectoriesKey)
+
+    let store = StateStore(repository: local)
+    try store.reload()
+
+    try expect(store.sessions.count, equals: 2, "local and remote sessions merge")
+    let remoteSession = store.sessions.first { $0.sessionID == "remote-b" }
+    let localSession = store.sessions.first { $0.sessionID == "local-a" }
+    try expect(remoteSession.map(store.isRemote), equals: true, "remote session is flagged")
+    try expect(localSession.map(store.isRemote), equals: false, "local session is not")
+
+    // Um pedido pendente REMOTO tem de receber a resposta no diretório dele.
+    let remoteBroker = PermissionBroker(stateDirectory: remoteDirectory)
+    let request = PermissionRequest(
+        id: "req-1", sessionID: "remote-b", tool: .claude, cwd: "/tmp",
+        toolName: "Bash", summary: "run", detail: "ls", detailKind: .command,
+        suggestions: [], createdAt: Date(), expiresAt: Date().addingTimeInterval(60))
+    // Escreve o pedido como o hook remoto o escreveria: ficheiro no
+    // subdiretório de decisões. O submitAndWait bloquearia este teste.
+    try remoteBroker.prepareDirectory()
+    let requestFile = remoteDirectory
+        .appendingPathComponent(PermissionBroker.directoryName)
+        .appendingPathComponent("req-1.request.json")
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    try encoder.encode(request).write(to: requestFile)
+    try store.reload()
+    try expect(store.pendingDecisions.contains { $0.id == "req-1" }, equals: true,
+               "remote pending request surfaces locally")
+    store.decide(request, .deny)
+    let reply = remoteDirectory
+        .appendingPathComponent(PermissionBroker.directoryName)
+        .appendingPathComponent("req-1.reply.json")
+    try expect(FileManager.default.fileExists(atPath: reply.path), equals: true,
+               "the reply lands in the REMOTE decisions directory")
 }

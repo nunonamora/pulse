@@ -56,6 +56,12 @@ struct PulseSettingsView: View {
                     set: updateLoginItem
                 ))
                 Toggle("Hide when no sessions are active", isOn: $hideWhenEmpty)
+                if let remotes = UserDefaults.standard.stringArray(
+                    forKey: StateStore.remoteDirectoriesKey), !remotes.isEmpty {
+                    Text("Remote state directories: \(remotes.joined(separator: ", ")). Added by scripts/pulse-remote.sh; sessions from there carry a remote badge.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
                 Toggle("Open the panel with \(GlobalHotkey.Combination.default.displayString)",
                        isOn: $hotkeyEnabled)
                 Text("Works from any app. Press it again to close.")
