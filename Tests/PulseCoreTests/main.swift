@@ -7645,6 +7645,7 @@ let tests: [(String, () throws -> Void)] = [
     ("CLI parses the universal report command", testCLIParsesUniversalReport),
     ("codex quota reads the newest rate limits", testCodexQuotaReadsTheNewestRateLimits),
     ("focus planner targets WezTerm and Kitty precisely", testFocusPlannerTargetsWezTermAndKittyPrecisely),
+    ("reply service escapes hostile text", testReplyServiceEscapesHostileText),
 ]
 
 if CommandLine.arguments.count == 3,
@@ -7855,4 +7856,30 @@ func testFocusPlannerTargetsWezTermAndKittyPrecisely() throws {
         equals: false,
         "shell metacharacters in the pane id never reach sh -c"
     )
+}
+
+func testReplyServiceEscapesHostileText() throws {
+    let script = try ReplyService.script(
+        reply: #"say "hi" \ and"# + "\nrun",
+        surfaceID: #"ABC"; do shell script "rm -rf ~" --"#,
+        pressEnter: true
+    )
+    // As aspas e barras da resposta ficam escapadas DENTRO da string do
+    // AppleScript; as do id são removidas — um id do cmux é um UUID e nunca
+    // as tem legitimamente.
+    try expect(script.contains(#"say \"hi\" \\ and\nrun\n"#), equals: true,
+               "reply text is fully escaped including the trailing newline")
+    try expect(script.contains(#"do shell script"# + "\" "), equals: false,
+               "quotes cannot break out of the surface id string")
+
+    do {
+        _ = try ReplyService.script(reply: "   \n", surfaceID: "X", pressEnter: true)
+        throw TestFailure.expectation("empty replies must be rejected")
+    } catch is ReplyService.ReplyError {}
+
+    let sessionWithout = AgentSession(
+        tool: .claude, sessionID: "s", pid: 1, status: .working,
+        cwd: "/tmp", startedAt: Date(), updatedAt: Date())
+    try expect(ReplyService.canReply(to: sessionWithout), equals: false,
+               "sessions without a cmux surface cannot reply")
 }

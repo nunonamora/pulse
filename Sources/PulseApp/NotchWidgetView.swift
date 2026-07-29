@@ -1400,7 +1400,7 @@ private struct SessionRow: View {
     /// Sub-modes of the inline action area: the button strip, the rename
     /// field, or the kill confirmation. All live inside the row itself so
     /// nothing ever floats outside the notch silhouette.
-    private enum ActionMode { case menu, renaming, confirmingKill }
+    private enum ActionMode { case menu, renaming, replying, confirmingKill }
 
     /// Quanto tempo o "Copied" fica no lugar do rótulo. Curto o bastante para
     /// não parecer que a linha ficou presa, longo o bastante para ser lido por
@@ -1424,6 +1424,10 @@ private struct SessionRow: View {
     /// anterior fechar um menu que o utilizador tinha acabado de abrir.
     @State private var copyFeedbackStamp = 0
     @FocusState private var renameFieldIsFocused: Bool
+    @State private var replyDraft = ""
+    @FocusState private var replyFieldIsFocused: Bool
+    /// A resposta falhou — o silêncio que parece sucesso é o pior desfecho.
+    @State private var replyFailed = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1674,6 +1678,19 @@ private struct SessionRow: View {
                 ) {
                     copyProjectPath()
                 }
+                // Responder ao agente sem sair do notch — só onde há canal
+                // para isso (o input text do cmux, dirigido ao painel exato).
+                // Um campo de resposta que fosse falhar seria pior do que
+                // nenhum.
+                if ReplyService.canReply(to: session) {
+                    ActionListRow(label: "Reply to Agent", systemImage: "arrowshape.turn.up.left") {
+                        mode = .replying
+                        replyDraft = ""
+                        replyFailed = false
+                        setKeyboardFocus(true)
+                        DispatchQueue.main.async { replyFieldIsFocused = true }
+                    }
+                }
                 ActionListRow(label: "Reveal in Finder", systemImage: "folder") {
                     NSWorkspace.shared.activateFileViewerSelecting(
                         [URL(fileURLWithPath: session.cwd)]
@@ -1705,6 +1722,27 @@ private struct SessionRow: View {
                     )
                 iconButton("checkmark", accessibilityLabel: "Save name", action: commitRename)
                 iconButton("xmark", accessibilityLabel: "Cancel rename", action: cancelRename)
+            }
+        case .replying:
+            HStack(spacing: 6) {
+                TextField(replyFailed ? "Could not reach that pane" : "Reply to the agent…",
+                          text: $replyDraft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.94))
+                    .focused($replyFieldIsFocused)
+                    .onSubmit(sendReply)
+                    .onExitCommand { endReplyKeyboard(); mode = .menu }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(replyFailed ? Color.red.opacity(0.18) : .white.opacity(0.1))
+                    )
+                iconButton("paperplane.fill", accessibilityLabel: "Send reply", action: sendReply)
+                iconButton("xmark", accessibilityLabel: "Cancel reply") {
+                    endReplyKeyboard(); mode = .menu
+                }
             }
         case .confirmingKill:
             HStack(spacing: 8) {
@@ -1785,6 +1823,23 @@ private struct SessionRow: View {
     private func cancelRename() {
         endRenameKeyboard()
         mode = .menu
+    }
+
+    /// Envia e fecha; em falha fica aberto e a dizer porquê — quem escreveu a
+    /// resposta merece a hipótese de a colar noutro sítio em vez de a perder.
+    private func sendReply() {
+        do {
+            try ReplyService.send(reply: replyDraft, to: session)
+            endReplyKeyboard()
+            toggleActions()
+        } catch {
+            replyFailed = true
+        }
+    }
+
+    private func endReplyKeyboard() {
+        replyFieldIsFocused = false
+        setKeyboardFocus(false)
     }
 
     private func endRenameKeyboard() {
