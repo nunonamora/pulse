@@ -107,6 +107,10 @@ public final class StateStore {
     /// o distintivo e para não prometer um salto de foco que não existe cá.
     public private(set) var remoteSessionIDs: Set<String> = []
 
+    /// Perguntas do agente em curso — as opções do AskUserQuestion, para o
+    /// cartão ⌘1/⌘2/⌘3.
+    public private(set) var pendingQuestions: [AgentQuestion] = []
+
     /// De que diretório veio cada pedido pendente: a resposta tem de voltar
     /// para o MESMO sítio, senão o hook remoto nunca a vê.
     private var pendingDecisionOrigins: [String: URL] = [:]
@@ -143,6 +147,14 @@ public final class StateStore {
         try? PermissionBroker(stateDirectory: origin).reply(to: request.id, decision: decision)
         decisionLog.record(request, decision)
         pendingDecisions.removeAll { $0.id == request.id }
+    }
+
+    /// Tira a pergunta do ecrã e do disco — respondida daqui, o PostToolUse
+    /// só viria confirmar o que já se sabe.
+    public func dismissQuestion(_ question: AgentQuestion) {
+        QuestionBox(stateDirectory: repository.directoryURL)
+            .clear(sessionID: question.sessionID)
+        pendingQuestions.removeAll { $0.sessionID == question.sessionID }
     }
 
     /// As últimas decisões, para o histórico do painel.
@@ -182,6 +194,8 @@ public final class StateStore {
             }
         }
         pendingDecisions = decisions
+        pendingQuestions = QuestionBox(
+            stateDirectory: repository.directoryURL).pending()
         pendingDecisionOrigins = origins
         remoteSessionIDs = remoteIDs
         sessions = merged

@@ -7647,6 +7647,7 @@ let tests: [(String, () throws -> Void)] = [
     ("focus planner targets WezTerm and Kitty precisely", testFocusPlannerTargetsWezTermAndKittyPrecisely),
     ("reply service escapes hostile text", testReplyServiceEscapesHostileText),
     ("state store merges remote directories", testStateStoreMergesRemoteDirectories),
+    ("question box lifecycle", testQuestionBoxLifecycle),
 ]
 
 if CommandLine.arguments.count == 3,
@@ -7940,4 +7941,28 @@ func testStateStoreMergesRemoteDirectories() throws {
         .appendingPathComponent("req-1.reply.json")
     try expect(FileManager.default.fileExists(atPath: reply.path), equals: true,
                "the reply lands in the REMOTE decisions directory")
+}
+
+func testQuestionBoxLifecycle() throws {
+    let dir = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let box = QuestionBox(stateDirectory: dir)
+    let question = AgentQuestion(
+        sessionID: "s/unsafe", tool: .claude,
+        question: "Which target?", options: ["A", "B"], askedAt: Date())
+
+    try box.post(question)
+    try expect(box.pending().count, equals: 1, "posted question is pending")
+    try expect(box.pending().first?.options ?? [], equals: ["A", "B"], "options survive")
+
+    // Uma pergunta velha não assombra o painel.
+    let stale = AgentQuestion(
+        sessionID: "old", tool: .claude, question: "?", options: [],
+        askedAt: Date().addingTimeInterval(-7200))
+    try box.post(stale)
+    try expect(box.pending().count, equals: 1, "stale questions are filtered out")
+
+    box.clear(sessionID: "s/unsafe")
+    try expect(box.pending().isEmpty, equals: true, "cleared question is gone")
 }

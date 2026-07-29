@@ -11,6 +11,11 @@ public enum ClaudeSettingsMerger {
         ("SessionStart", nil, nil),
         ("Notification", "permission_prompt|idle_prompt", nil),
         ("UserPromptSubmit", nil, nil),
+        // Só o AskUserQuestion: é o que permite mostrar a pergunta com as
+        // opções no notch. Não bloqueia — o prompt do terminal aparece na
+        // mesma, e responder aqui é escrever lá.
+        ("PreToolUse", "AskUserQuestion", nil),
+        ("PostToolUse", "AskUserQuestion", nil),
         ("Stop", nil, nil),
         ("SessionEnd", nil, nil),
         // Este é o único que bloqueia: o processo do hook fica à espera da tua

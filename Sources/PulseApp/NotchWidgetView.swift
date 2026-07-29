@@ -260,6 +260,24 @@ struct NotchWidgetView: View {
                         .onReceive(
                             Timer.publish(every: 1, on: .main, in: .common).autoconnect()
                         ) { decisionClock = $0 }
+                    } else if isExpanded, let question = store.pendingQuestions.first {
+                        QuestionCard(
+                            question: question,
+                            session: store.sessions.first {
+                                $0.sessionID == question.sessionID
+                            },
+                            bandInset: layout.expandedContentSideInset,
+                            textInset: SessionMenuLayout.expandedHeaderLeadingInset
+                                + layout.expandedContentSideInset,
+                            dismiss: {
+                                // O cartão morre já; o PostToolUse confirma
+                                // no ciclo seguinte. Sem isto ficava a piscar
+                                // até o hook do outro lado dar sinal.
+                                store.dismissQuestion(question)
+                            }
+                        )
+                        .frame(width: menuWidth)
+                        .transition(.opacity)
                     } else if isExpanded, showsHistory {
                         // A seguir ao cartão e não à frente dele: um pedido por
                         // responder tem um agente parado do outro lado, e nada
@@ -479,6 +497,9 @@ struct NotchWidgetView: View {
         }
         .onChange(of: store.hasPendingDecision) { _, isPending in
             presentPendingDecision(isPending)
+        }
+        .onChange(of: store.pendingQuestions.isEmpty) { _, isEmpty in
+            if !isEmpty { presentPendingDecision(true) }
         }
         .onAppear { presentPendingDecision(store.hasPendingDecision) }
         .onReceive(NotificationCenter.default.publisher(for: .pulseToggleMenu)) { _ in
@@ -2298,6 +2319,19 @@ enum UIRender {
                 width: geometry.width, name: name
             )
         }
+
+        render(
+            QuestionCard(
+                question: AgentQuestion(
+                    sessionID: "fixture", tool: .claude,
+                    question: "Which deployment target?",
+                    options: ["Production", "Staging", "Local only"],
+                    askedAt: Date()),
+                session: fixtures.first,
+                bandInset: 14, textInset: 38, dismiss: {}
+            ),
+            width: 800, name: "question"
+        )
 
         // Os feixes de luz, congelados a meio do voo (progress 0,55): é o
         // único instante em que um efeito transitório se deixa retratar.

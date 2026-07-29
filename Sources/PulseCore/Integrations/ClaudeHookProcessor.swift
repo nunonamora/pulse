@@ -11,12 +11,25 @@ public struct ClaudeHookProcessor: Sendable {
         let cwd: String
         let notificationType: String?
         let transcriptPath: String?
+        let toolName: String?
+        let toolInput: AskInput?
+
+        struct AskInput: Decodable {
+            let questions: [Question]?
+            struct Question: Decodable {
+                let question: String
+                let options: [Option]?
+                struct Option: Decodable { let label: String }
+            }
+        }
 
         enum CodingKeys: String, CodingKey {
             case sessionID = "session_id"
             case cwd
             case notificationType = "notification_type"
             case transcriptPath = "transcript_path"
+            case toolName = "tool_name"
+            case toolInput = "tool_input"
         }
     }
 
@@ -42,6 +55,24 @@ public struct ClaudeHookProcessor: Sendable {
         let existing = try repository.loadLifecycleSessions().first {
             $0.sessionID == input.sessionID
         }
+        // O AskUserQuestion é o único tool-use com tratamento próprio: a
+        // pergunta e as opções vão para o notch. O PostToolUse — respondida,
+        // aqui ou no terminal — tira-a de lá; o fim da sessão também.
+        let questions = QuestionBox(stateDirectory: repository.directoryURL)
+        if event == "PreToolUse", input.toolName == "AskUserQuestion",
+           let asked = input.toolInput?.questions?.first {
+            try? questions.post(AgentQuestion(
+                sessionID: input.sessionID,
+                tool: .claude,
+                question: asked.question,
+                options: (asked.options ?? []).map(\.label),
+                askedAt: now
+            ))
+        }
+        if event == "PostToolUse" || event == "Stop" || event == "SessionEnd" {
+            questions.clear(sessionID: input.sessionID)
+        }
+
         let state = try state(
             for: event,
             notificationType: notificationTypeOverride ?? input.notificationType,
@@ -91,6 +122,10 @@ public struct ClaudeHookProcessor: Sendable {
         case "Notification":
             throw ClaudeHookError.unsupportedNotification(notificationType)
         case "UserPromptSubmit":
+            return (.working, nil)
+        case "PreToolUse", "PostToolUse":
+            // Só chegam cá com o matcher AskUserQuestion; a sessão está a
+            // trabalhar em ambos os lados da pergunta.
             return (.working, nil)
         case "Stop":
             return (.idle, nil)

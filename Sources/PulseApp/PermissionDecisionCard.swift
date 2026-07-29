@@ -556,7 +556,7 @@ private struct DecisionButton: View {
 ///
 /// 0,96 e não menos: um botão de 28 pt de alto a encolher mais do que isto
 /// salta em vez de responder.
-private struct PressableButtonStyle: ButtonStyle {
+struct PressableButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
