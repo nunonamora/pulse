@@ -7715,7 +7715,7 @@ func testPlanUsageSumsOnlyTheWindow() throws {
         formatter.string(from: now.addingTimeInterval(-minutesAgo * 60))
     }
     func usageLine(_ minutesAgo: Double, output: Int) -> String {
-        #"{"timestamp":"\#(stamp(minutesAgo))","message":{"usage":{"input_tokens":100,"cache_creation_input_tokens":50,"cache_read_input_tokens":9999,"output_tokens":\#(output)}}}"#
+        #"{"timestamp":"\#(stamp(minutesAgo))","message":{"model":"claude-opus-5","usage":{"input_tokens":100,"cache_creation_input_tokens":50,"cache_read_input_tokens":9999,"output_tokens":\#(output)}}}"#
     }
     // Duas dentro da janela, uma fora, e ruído sem usage pelo meio.
     let lines = [
@@ -7729,6 +7729,8 @@ func testPlanUsageSumsOnlyTheWindow() throws {
 
     let burn = PlanUsage.currentWindow(projectsDirectory: root, now: now)
     try expect(burn.responses, equals: 2, "only in-window responses count")
+    try expect(burn.byProvider["Claude"] ?? 0 > 0, equals: true,
+               "provider breakdown attributes tokens to the model family")
     // 2 × (100 novos + 50 cache criada) + 200 + 300; a cache LIDA fica de fora.
     try expect(burn.tokens, equals: 800, "tokens sum input+created+output, never cache reads")
     try expect(burn.sessions, equals: 1, "one contributing session")

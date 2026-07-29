@@ -628,10 +628,7 @@ struct NotchWidgetView: View {
                         .font(.system(size: 10, weight: .medium, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(.white.opacity(0.32))
-                        .help(String(
-                            format: "Last 5 h across every Claude session: %d responses, %.1fM new tokens, %d sessions",
-                            burn.responses, Double(burn.tokens) / 1_000_000, burn.sessions
-                        ))
+                        .help(burnHelp(burn))
                         .accessibilityLabel("Plan burn: \(burn.responses) responses in five hours")
                 }
                 Text(showsHistory ? decisionHistory.count : sessionCount, format: .number)
@@ -734,6 +731,24 @@ struct NotchWidgetView: View {
     /// no disco naquele momento — incluindo a decisão que tomaste há dez
     /// segundos — sem que a vista ande a sondar o ficheiro enquanto está
     /// fechada, que é o tempo quase todo.
+    /// O detalhe do queimador, com a discriminação por fornecedor quando há
+    /// mais do que um — Kimi, GLM e DeepSeek a correr através do Claude Code
+    /// aparecem aqui pelo nome, porque o modelo de cada linha os denuncia.
+    private func burnHelp(_ burn: PlanUsage.Burn) -> String {
+        var text = String(
+            format: "Last 5 h across every session: %d responses, %.1fM new tokens, %d sessions",
+            burn.responses, Double(burn.tokens) / 1_000_000, burn.sessions
+        )
+        if burn.byProvider.count > 1 {
+            let parts = burn.byProvider
+                .sorted { $0.value > $1.value }
+                .map { "\($0.key) \($0.value / 1000)k" }
+                .joined(separator: " · ")
+            text += "\n" + parts
+        }
+        return text
+    }
+
     /// "1,2M · 5 h" — curto o bastante para viver ao lado da contagem.
     private func burnLabel(_ burn: PlanUsage.Burn) -> String {
         let millions = Double(burn.tokens) / 1_000_000

@@ -27,6 +27,25 @@ public enum PlanUsage {
         public let tokens: Int
         /// Sessões distintas que contribuíram.
         public let sessions: Int
+        /// Tokens por fornecedor, deduzido do nome do modelo de cada linha.
+        ///
+        /// Kimi, GLM e DeepSeek correm tipicamente ATRAVÉS do Claude Code
+        /// (router/base URL), e nesse arranjo o uso deles aterra nos mesmos
+        /// transcripts — só muda o `model`. Discriminar aqui é o que torna a
+        /// quota multi-fornecedor verdadeira em vez de um rótulo.
+        public let byProvider: [String: Int]
+    }
+
+    /// De que fornecedor veio este modelo. Prefixos e não igualdade: os nomes
+    /// versionam ("kimi-k2-0905"), a família não.
+    public static func provider(forModel model: String) -> String {
+        let lowered = model.lowercased()
+        if lowered.contains("claude") { return "Claude" }
+        if lowered.contains("kimi") { return "Kimi" }
+        if lowered.contains("glm") { return "GLM" }
+        if lowered.contains("deepseek") { return "DeepSeek" }
+        if lowered.contains("gpt") || lowered.contains("codex") { return "OpenAI" }
+        return "Other"
     }
 
     /// O consumo da janela que termina agora.
@@ -38,6 +57,7 @@ public enum PlanUsage {
     ) -> Burn {
         let windowStart = now.addingTimeInterval(-hours * 3600)
         var responses = 0, tokens = 0, sessions = 0
+        var byProvider: [String: Int] = [:]
 
         let files = (try? FileManager.default.contentsOfDirectory(
             at: projectsDirectory, includingPropertiesForKeys: [.contentModificationDateKey]
@@ -50,29 +70,34 @@ public enum PlanUsage {
                 guard let modified = try? transcript.resourceValues(
                     forKeys: [.contentModificationDateKey]
                 ).contentModificationDate, modified > windowStart else { continue }
-                let (r, t) = tally(transcript, since: windowStart)
+                let (r, t, providers) = tally(transcript, since: windowStart)
                 if r > 0 {
                     responses += r
                     tokens += t
                     sessions += 1
+                    byProvider.merge(providers, uniquingKeysWith: +)
                 }
             }
         }
-        return Burn(responses: responses, tokens: tokens, sessions: sessions)
+        return Burn(responses: responses, tokens: tokens, sessions: sessions,
+                    byProvider: byProvider)
     }
 
     /// Lê o ficheiro do fim para o princípio, em blocos de 1 MB, e para no
     /// primeiro bloco cujas linhas já estão todas antes da janela. O teto de
     /// 16 MB é a rede de segurança para uma sessão monstruosa: subconta em vez
     /// de bloquear, que é a troca certa para um mostrador.
-    private static func tally(_ url: URL, since windowStart: Date) -> (Int, Int) {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return (0, 0) }
+    private static func tally(
+        _ url: URL, since windowStart: Date
+    ) -> (Int, Int, [String: Int]) {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return (0, 0, [:]) }
         defer { try? handle.close() }
         let size = (try? handle.seekToEnd()) ?? 0
         let chunk: UInt64 = 1024 * 1024
         let maxChunks = 16
 
         var responses = 0, tokens = 0
+        var byProvider: [String: Int] = [:]
         var end = size
         let boundary = iso8601(windowStart)
 
@@ -97,15 +122,18 @@ public enum PlanUsage {
                       let usage = message["usage"] as? [String: Any]
                 else { continue }
                 responses += 1
-                tokens += (usage["input_tokens"] as? Int ?? 0)
+                let lineTokens = (usage["input_tokens"] as? Int ?? 0)
                     + (usage["cache_creation_input_tokens"] as? Int ?? 0)
                     + (usage["output_tokens"] as? Int ?? 0)
+                tokens += lineTokens
+                let model = field(line, "\"model\":\"") ?? "other"
+                byProvider[provider(forModel: model), default: 0] += lineTokens
             }
 
             if !sawInside && start < end { break }   // já saímos da janela
             end = start
         }
-        return (responses, tokens)
+        return (responses, tokens, byProvider)
     }
 
     private static func field(_ line: Substring, _ key: String) -> String? {
