@@ -115,6 +115,7 @@ final class Earcons {
         case .opencode: base = [329.63, 493.88]   // E4 → B4
         case .pi:       base = [739.99, 554.37]   // F#5 → C#5, a descer
         case .convoy:   base = [261.63, 392.00]   // C4 → G4, grave
+        case .other:    base = [349.23, 440.00]   // F4 → A4, neutro
         }
         switch state {
         case .needsDecision:
@@ -259,6 +260,7 @@ final class VoiceCatalog {
         case .opencode: tuning = (0.48, 0.94)
         case .pi:       tuning = (0.52, 1.06)
         case .convoy:   tuning = (0.44, 0.90)
+        case .other:    tuning = (0.48, 1.00)
         }
         return VoiceProfile(voice: voice(for: tool), rate: tuning.rate, pitch: tuning.pitch)
     }

@@ -134,6 +134,7 @@ enum MascotArt {
         case .codex:    return codex
         case .opencode: return opencode
         case .pi:       return pi
+        case .other:    return convoy   // silhueta neutra; sem marca própria
         case .convoy:   return convoy
         }
     }
@@ -209,6 +210,7 @@ enum MascotArt {
         case .opencode: return (0.37, 0.55, 1.00)
         case .pi:       return (0.96, 0.45, 0.71)
         case .convoy:   return (0.18, 0.83, 0.75)
+        case .other:    return (0.62, 0.62, 0.68)
         }
     }
 

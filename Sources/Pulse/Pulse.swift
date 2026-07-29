@@ -91,6 +91,36 @@ do {
             payload: try BoundedInput.read(from: .standardInput),
             processID: processID
         )
+    case let .report(tool, sessionID, status, cwd, processID):
+        // O adaptador universal. O nome real da ferramenta viaja no título,
+        // porque o enum só conhece as integrações nativas; para tudo o resto
+        // a identidade visível é o nome que a própria ferramenta reportou.
+        let knownTool = AgentTool(rawValue: tool) ?? .other
+        let mapped: (SessionStatus, AttentionReason?)
+        switch status {
+        case "working":   mapped = (.working, nil)
+        case "attention": mapped = (.needsAttention, .permission)
+        case "ended":     mapped = (.ended, nil)
+        default:          mapped = (.idle, nil)
+        }
+        let existing = try? repository.loadSessions().first {
+            $0.sessionID == sessionID && $0.tool == knownTool
+        }
+        let now = Date()
+        try repository.save(AgentSession(
+            tool: knownTool,
+            sessionID: sessionID,
+            pid: processID > 0 ? processID : ProcessInfo.processInfo.processIdentifier,
+            status: mapped.0,
+            attentionReason: mapped.1,
+            cwd: cwd,
+            startedAt: existing?.startedAt ?? now,
+            updatedAt: now,
+            terminal: TerminalContext(
+                windowTitleHint: "\(URL(fileURLWithPath: cwd).lastPathComponent) — \(tool)"
+            )
+        ))
+        StateChangeNotifier.post()
     }
 } catch {
     if !isHookInvocation {

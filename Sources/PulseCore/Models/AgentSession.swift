@@ -10,6 +10,9 @@ public enum AgentTool: String, Codable, CaseIterable, Sendable {
     case convoy
     case opencode
     case pi
+    /// Qualquer ferramenta que se reporte pelo adaptador universal
+    /// (`pulse report`). Não tem integração própria — tem o contrato.
+    case other
 }
 
 public enum SessionStatus: String, Codable, Sendable {

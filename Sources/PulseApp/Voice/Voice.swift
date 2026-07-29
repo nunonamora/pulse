@@ -230,6 +230,7 @@ final class Voice {
         case .codex:    return 190
         case .opencode: return 170
         case .pi:       return 196
+        case .other:    return 180
         case .convoy:   return 164
         }
     }
@@ -354,6 +355,7 @@ extension AgentTool {
         case .claude:   return "Claude"
         case .codex:    return "Códex"
         case .convoy:   return "Convoy"
+        case .other:    return "o agente"
         case .opencode: return "Open Code"
         case .pi:       return "Pi"
         }

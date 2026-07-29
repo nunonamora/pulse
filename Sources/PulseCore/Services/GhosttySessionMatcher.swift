@@ -137,7 +137,7 @@ public enum GhosttySessionMatcher {
             guard let firstScalar = title.unicodeScalars.first else { return false }
             return (0x2800...0x28FF).contains(firstScalar.value)
                 || "✳✻✽".unicodeScalars.contains(firstScalar)
-        case .codex, .convoy, .pi:
+        case .codex, .convoy, .pi, .other:
             return false
         }
     }

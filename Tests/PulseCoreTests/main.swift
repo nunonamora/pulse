@@ -7642,6 +7642,7 @@ let tests: [(String, () throws -> Void)] = [
     ("plan usage sums only the five-hour window", testPlanUsageSumsOnlyTheWindow),
     ("subagent meter counts only unfinished tasks", testSubagentMeterCountsOnlyUnfinishedTasks),
     ("sound pack resolver prefers tool-specific files", testSoundPackResolverPrefersToolSpecificFiles),
+    ("CLI parses the universal report command", testCLIParsesUniversalReport),
 ]
 
 if CommandLine.arguments.count == 3,
@@ -7765,4 +7766,23 @@ func testSoundPackResolverPrefersToolSpecificFiles() throws {
                "other tools fall back to the generic file")
     try expect(SoundPackResolver.resolve(tool: "codex", event: "failed", in: dir) == nil,
                equals: true, "missing event resolves to synthesis")
+}
+
+func testCLIParsesUniversalReport() throws {
+    let parsed = try CLICommand.parse(arguments: [
+        "report", "--tool", "gemini", "--session", "s1", "--status", "attention",
+        "--cwd", "/tmp/x", "--pid", "42",
+    ])
+    try expect(
+        parsed,
+        equals: .report(tool: "gemini", sessionID: "s1", status: "attention",
+                        cwd: "/tmp/x", processID: 42),
+        "report parses flags in any order with cwd and pid"
+    )
+    // Estado desconhecido é erro, não palpite: um typo em --status não pode
+    // virar silenciosamente uma sessão idle.
+    do {
+        _ = try CLICommand.parse(arguments: ["report", "--tool", "x", "--session", "s", "--status", "banana"])
+        throw TestFailure.expectation("unknown status must be rejected")
+    } catch is CLIError {}
 }
