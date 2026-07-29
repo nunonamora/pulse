@@ -89,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // interface mas qualquer leitura por bool(forKey:) fora da view
             // devolve false — e a voz nunca falava.
             "voiceEnabled": false,
+            "soundsEnabled": true,
             "voiceOnTurnComplete": true,
             "voiceOnAttention": true,
             "voiceSilentOnCall": true,

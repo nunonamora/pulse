@@ -118,6 +118,9 @@ struct NotchWidgetView: View {
     @State private var planBurnAt: Date = .distantPast
     /// A quota do Codex, dita pela OpenAI nos rollouts locais.
     @State private var codexQuota: CodexQuota.Snapshot?
+    /// O interruptor de som, guardado entre arranques: silenciar é uma decisão
+    /// que dura, e voltar a soar sozinho ao reabrir a app seria uma traição.
+    @AppStorage("soundsEnabled") private var soundsEnabled = true
     /// As duas janelas de limite, já com o instante de renovação resolvido.
     /// A de sete dias é a que se esquece: um dia de trabalho intenso não gasta
     /// a semana, mas quatro gastam — e quando dá pelo limite semanal já é
@@ -714,6 +717,17 @@ struct NotchWidgetView: View {
                         ? "Show active sessions" : "Show decision history",
                     isActive: showsHistory,
                     action: toggleHistory
+                )
+                // Silenciar num gesto, sem abrir definições nenhumas: é o
+                // controlo que se procura com pressa — alguém entrou na sala,
+                // a chamada começou — e três cliques de distância seria o
+                // mesmo que não existir.
+                HeaderIconButton(
+                    systemImage: soundsEnabled
+                        ? "speaker.wave.2.fill" : "speaker.slash.fill",
+                    accessibilityLabel: soundsEnabled ? "Mute sounds" : "Unmute sounds",
+                    isActive: !soundsEnabled,
+                    action: { soundsEnabled.toggle() }
                 )
                 // A porta visível para a janela de Definições; o menu do clique
                 // direito na silhueta fica como alternativa para quando não há

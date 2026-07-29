@@ -58,6 +58,12 @@ final class Earcons {
     }
 
     func play(tool: AgentTool, state: EarconState) {
+        // O interruptor de som do cabeçalho manda em tudo o que soa, incluindo
+        // packs do utilizador. É o gesto de quem entrou numa reunião: tem de
+        // calar TUDO, sem exceções escondidas.
+        guard UserDefaults.standard.object(forKey: "soundsEnabled") == nil
+                || UserDefaults.standard.bool(forKey: "soundsEnabled")
+        else { return }
         // Um pack do utilizador ganha a tudo: é a personalização mais
         // explícita que existe — ele pôs lá o ficheiro.
         if let packed = SoundPackResolver.resolve(
